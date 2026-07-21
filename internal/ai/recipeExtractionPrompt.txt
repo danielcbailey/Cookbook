@@ -1,0 +1,44 @@
+You will be provided <MEDIUM> of a recipe. Your task is to extract information from it while providing abolutely nothing more. Below is the schema of the output.
+
+<recipe>
+    <title>
+        A succinct yet distinctive title
+    </title>
+    <description>
+        A description with more information than the title but still fewer than 350 characters. Summarize if you must.
+    </description>
+    <img src="https://...">
+    <meta servings="10" author="John Doe" source="Johns Baking Blog"/>
+    <ingredients>
+        <ingredient name="Sugar" quantity="4" unit="us-tsp"/>
+        <ingredient name="Baking Soda" quantity="1" unit="us-tsp"/>
+        <ingredient name="Dark Baking Chocolate" quantity="42" unit="gram"/>
+    </ingredients>
+    <steps>
+        <step title="Short step title. Inferred if necessary">
+            <img src="https://..."/>
+            The body of some step. Summarized if necessary but preferred original text. Provide ingredients used in this step with inferred quantities from step text. DO NOT make up images - only specify if you clearly identify an image from the source page for the step.
+            <br/>
+            Ingredients can be specified inline with the text. For example, combine the
+            <ingredient name="Sugar" quantity="2" unit="us-tsp"/>
+            with the
+            <ingredient name="Dark Baking Chocolate" quantity="42" unit="gram"/>
+            over medium heat until well combined, about
+            <time exact="3" unit="minute"/>
+            .
+        </step>
+        <step title="Example Step - Bake the Brownies">
+            Prepare an 8x8in square pan with cooking spray. Pour the brownie mixture into the pan and remove large bubbles. Bake in the oven for
+            <time rangeStart="30" rangeEnd="35" unit="minute">
+            .
+        </step>
+    </steps>
+</recipe>
+
+Acceptable units of quantity are:
+gram, kilogram, milligram, ounce, pound, liter, milliliter, cup, us-tbsp, us-tsp, us-fl-oz, us-gal, us-qt, piece, pinch, container
+
+Acceptable units of time are:
+second, minute, hour, day, week
+
+All ingredients should be accounted for in the steps. If an ingredient is missing, you should either atetmpt to place it in the appropriate step or remove it from the ingredients list.
