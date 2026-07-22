@@ -5,7 +5,7 @@ import (
 	"log/slog"
 	"net/http"
 
-	"github.com/danielcbailey/Cookbook/internal/config"
+	"github.com/danielcbailey/Cookbook/core/config"
 	"github.com/google/uuid"
 )
 
@@ -16,7 +16,33 @@ type providersHandler struct {
 
 type providersCtxKey struct{}
 
-func WithProviders(providers config.Providers, next http.Handler) http.Handler {
+type responseWriter struct {
+	http.ResponseWriter
+	statusCode  int
+	errorBody   []byte
+	wroteHeader bool
+}
+
+func (rw *responseWriter) WriteHeader(code int) {
+	if rw.wroteHeader {
+		return
+	}
+	rw.wroteHeader = true
+	rw.statusCode = code
+	rw.ResponseWriter.WriteHeader(code)
+}
+
+func (rw *responseWriter) Write(b []byte) (int, error) {
+	if !rw.wroteHeader {
+		rw.WriteHeader(http.StatusOK)
+	}
+	if rw.statusCode >= 400 {
+		rw.errorBody = append(rw.errorBody, b...)
+	}
+	return rw.ResponseWriter.Write(b)
+}
+
+func WithLoggingProviders(providers config.Providers, next http.Handler) http.Handler {
 	return &providersHandler{next: next, providers: providers}
 }
 
@@ -38,7 +64,15 @@ func (h *providersHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	providers := h.providers.WithLog(h.providers.Log().With(slog.String("xid", requestID)))
 
 	ctx := context.WithValue(r.Context(), providersCtxKey{}, providers)
-	h.next.ServeHTTP(w, r.WithContext(ctx))
+	rw := &responseWriter{ResponseWriter: w, statusCode: http.StatusOK}
+	h.next.ServeHTTP(rw, r.WithContext(ctx))
+	attrs := []any{slog.String("method", r.Method), slog.String("path", r.URL.Path), slog.Int("status", rw.statusCode), slog.String("remote_ip", r.RemoteAddr)}
+	if rw.statusCode >= 400 {
+		attrs = append(attrs, slog.String("body", string(rw.errorBody)))
+		providers.Log().Error("request", attrs...)
+	} else {
+		providers.Log().Info("request", attrs...)
+	}
 }
 
 func GetProviders(r *http.Request) config.Providers {

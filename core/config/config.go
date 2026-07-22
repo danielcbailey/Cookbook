@@ -8,7 +8,10 @@ import (
 )
 
 type Config struct {
-	OpenAIKey string `yaml:"openai_key"`
+	OpenAIKey             string `yaml:"openai_key"`
+	TokenExpirySeconds    int    `yaml:"token_expiry_seconds"`
+	RecipeImportEnabled   bool   `yaml:"recipe_import_enabled"`
+	SemanticSearchEnabled bool   `yaml:"semantic_search_enabled"`
 }
 
 var config *Config
@@ -24,5 +27,13 @@ func LoadConfig() (*Config, error) {
 		return nil, fmt.Errorf("failed to unmarshal config.yaml: %w", e)
 	}
 
-	return config, nil
+	return config, checkConfig(config)
+}
+
+func checkConfig(config *Config) error {
+	if (config.RecipeImportEnabled || config.SemanticSearchEnabled) && config.OpenAIKey == "" {
+		return fmt.Errorf("openai_key required for recipe import and semantic search, but was not set")
+	}
+
+	return nil
 }

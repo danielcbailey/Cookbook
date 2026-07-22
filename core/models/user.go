@@ -1,5 +1,7 @@
 package models
 
+import "time"
+
 type User struct {
 	// PII
 	ID           int64  `json:"id"`
@@ -16,4 +18,9 @@ type User struct {
 	// Usage
 	CurrentPhotoStorageMB          int `json:"current_photo_storage_mb"`
 	CurrentMonthlyRecipeExtraction int `json:"current_monthly_recipe_extraction"`
+
+	// Timestamps
+	CreatedAt      time.Time `json:"created_at"`
+	UpdatedAt      time.Time `json:"updated_at"`
+	LastUsageReset time.Time `json:"last_usage_reset"`
 }

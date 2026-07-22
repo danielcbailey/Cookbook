@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/danielcbailey/Cookbook/internal/cache"
+	"github.com/danielcbailey/Cookbook/pkg/cache"
 )
 
 const ipRateLimit = 200 // per minute

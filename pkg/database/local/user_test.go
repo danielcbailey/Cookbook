@@ -71,7 +71,7 @@ func TestGetUserByPasswordHash(t *testing.T) {
 	u := testUser()
 	tx.CreateUser(&u)
 
-	got, err := tx.GetUserByPasswordHash("hash123")
+	got, err := tx.GetUserByPasswordHash("test@example.com", "hash123")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -88,7 +88,7 @@ func TestGetUserByPasswordHash_NotFound(t *testing.T) {
 	tx, _ := db.NewTransaction(t.Context())
 	defer tx.Rollback()
 
-	_, err = tx.GetUserByPasswordHash("nonexistent")
+	_, err = tx.GetUserByPasswordHash("test@example.com", "nonexistent")
 	if !errors.Is(err, database.ErrNotFound) {
 		t.Fatalf("expected ErrNotFound, got %v", err)
 	}

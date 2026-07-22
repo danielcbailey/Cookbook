@@ -42,3 +42,5 @@ Acceptable units of time are:
 second, minute, hour, day, week
 
 All ingredients should be accounted for in the steps. If an ingredient is missing, you should either atetmpt to place it in the appropriate step or remove it from the ingredients list.
+
+If the provided website is not a recipe, respond with exactly <error>Not a recipe</error>

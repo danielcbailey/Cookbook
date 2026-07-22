@@ -1,9 +1,14 @@
 package apicommon
 
 import (
+	"context"
+	"crypto/rand"
+	"math/big"
 	"net/http"
+	"time"
 
-	"github.com/danielcbailey/Cookbook/internal/models"
+	"github.com/danielcbailey/Cookbook/core/config"
+	"github.com/danielcbailey/Cookbook/core/models"
 )
 
 type authHandler struct {
@@ -23,7 +28,7 @@ func (h *authHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	// Checking cache
 	var user models.User
-	err := providers.Cache().GetInterface(r.Context(), "sessions:"+token, &user)
+	err := providers.Cache().GetInterface(r.Context(), sessionKey(token), &user)
 	if err != nil {
 		if providers.Cache().ErrIsNotFound(err) {
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
@@ -35,6 +40,10 @@ func (h *authHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
 	}
+
+	providers = providers.WithUser(&user)
+	ctx := context.WithValue(r.Context(), providersCtxKey{}, providers)
+	h.next.ServeHTTP(w, r.WithContext(ctx))
 }
 
 func getToken(r *http.Request) string {
@@ -45,4 +54,40 @@ func getToken(r *http.Request) string {
 		return h[7:]
 	}
 	return ""
+}
+
+func CreateUserToken(ctx context.Context, providers config.Providers, user *models.User) (string, time.Time, error) {
+	token, err := secureRandomString(32)
+	if err != nil {
+		return "", time.Time{}, err
+	}
+
+	expirySeconds := providers.Config().TokenExpirySeconds
+	if expirySeconds == 0 {
+		expirySeconds = 8 * 60 * 60 // 8 hours
+	}
+
+	expiryDuration := time.Duration(expirySeconds) * time.Second
+
+	return token, time.Now().Add(expiryDuration), providers.Cache().SetInterface(ctx, sessionKey(token), user, expiryDuration)
+}
+
+func secureRandomString(length int) (string, error) {
+	const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+
+	b := make([]byte, length)
+	charsetLen := big.NewInt(int64(len(charset)))
+
+	for i := range b {
+		num, err := rand.Int(rand.Reader, charsetLen)
+		if err != nil {
+			return "", err
+		}
+		b[i] = charset[num.Int64()]
+	}
+	return string(b), nil
+}
+
+func sessionKey(token string) string {
+	return "sessions:" + token
 }

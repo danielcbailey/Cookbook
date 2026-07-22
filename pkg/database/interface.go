@@ -18,7 +18,7 @@ type Transaction interface {
 	Rollback() error
 
 	// Users
-	GetUserByPasswordHash(passwordHash string) (*models.User, error)
+	GetUserByPasswordHash(email string, passwordHash string) (*models.User, error)
 	GetUserByID(userID int64) (*models.User, error)
 	CreateUser(user *models.User) error
 	UpdateUser(user *models.User) error

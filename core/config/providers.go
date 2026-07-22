@@ -3,7 +3,9 @@ package config
 import (
 	"log/slog"
 
+	"github.com/danielcbailey/Cookbook/core/models"
 	"github.com/danielcbailey/Cookbook/pkg/cache"
+	"github.com/danielcbailey/Cookbook/pkg/database"
 	"github.com/openai/openai-go/v3"
 )
 
@@ -17,6 +19,12 @@ type Providers interface {
 	Cache() cache.Cache
 	WithCache(c cache.Cache) Providers
 
+	DB() database.Database
+	WithDB(db database.Database) Providers
+
+	User() *models.User
+	WithUser(user *models.User) Providers
+
 	Log() *slog.Logger
 	WithLog(logger *slog.Logger) Providers
 }
@@ -25,6 +33,8 @@ type providers struct {
 	config       *Config
 	openAIClient *openai.Client
 	cache        cache.Cache
+	db           database.Database
+	user         *models.User
 	log          *slog.Logger
 }
 
@@ -62,6 +72,26 @@ func (p *providers) WithCache(c cache.Cache) Providers {
 	return newProviders
 }
 
+func (p *providers) DB() database.Database {
+	return p.db
+}
+
+func (p *providers) WithDB(db database.Database) Providers {
+	newProviders := p.copy()
+	newProviders.db = db
+	return newProviders
+}
+
+func (p *providers) User() *models.User {
+	return p.user
+}
+
+func (p *providers) WithUser(user *models.User) Providers {
+	newProviders := p.copy()
+	newProviders.user = user
+	return newProviders
+}
+
 func (p *providers) Log() *slog.Logger {
 	return p.log
 }
@@ -73,10 +103,7 @@ func (p *providers) WithLog(logger *slog.Logger) Providers {
 }
 
 func (p *providers) copy() *providers {
-	return &providers{
-		config:       p.config,
-		openAIClient: p.openAIClient,
-		cache:        p.cache,
-		log:          p.log,
-	}
+	provs := *p
+	c := provs
+	return &c
 }

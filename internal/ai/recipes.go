@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/danielcbailey/Cookbook/core/apicommon"
 	"github.com/danielcbailey/Cookbook/core/config"
 	"github.com/danielcbailey/Cookbook/core/models"
 	"github.com/openai/openai-go/v3"
@@ -22,7 +23,7 @@ var recipeExtractionPrompt string
 
 const (
 	recipeMediumHTML  = "the HTML content"
-	recipeMediumPhoto = "a photo"
+	recipeMediumPhoto = "photos"
 )
 
 func getRecipeExtractionPrompt(medium string) string {
@@ -59,18 +60,35 @@ func ExtractRecipeFromHTML(ctx context.Context, providers config.Providers, text
 		return nil, err
 	}
 
-	decoder := xml.NewDecoder(strings.NewReader(response.Choices[len(response.Choices)-1].Message.Content))
+	modelOutput := response.Choices[len(response.Choices)-1].Message.Content
+	if strings.HasPrefix(modelOutput, "<error>Not a recipe</error>") {
+		return nil, apicommon.NewUserFacingError("the provided website is not a recipe")
+	}
+
+	decoder := xml.NewDecoder(strings.NewReader(modelOutput))
 
 	return parseRecipe(decoder)
 }
 
-func ExtractRecipeFromPhoto(ctx context.Context, providers config.Providers, photo []byte, mimeType string) (*models.Recipe, error) {
+type FileAttachment struct {
+	MimeType string
+	Content  []byte
+}
+
+func ExtractRecipeFromPhotos(ctx context.Context, providers config.Providers, files []FileAttachment) (*models.Recipe, error) {
 	prompt := getRecipeExtractionPrompt(recipeMediumPhoto)
 
-	imageURL := &openai.ChatCompletionContentPartImageParam{
-		ImageURL: openai.ChatCompletionContentPartImageImageURLParam{
-			URL: "data:" + mimeType + ";base64," + base64.StdEncoding.EncodeToString(photo),
-		},
+	contentParts := make([]openai.ChatCompletionContentPartUnionParam, len(files))
+	for _, file := range files {
+		imageURL := &openai.ChatCompletionContentPartImageParam{
+			ImageURL: openai.ChatCompletionContentPartImageImageURLParam{
+				URL: "data:" + file.MimeType + ";base64," + base64.StdEncoding.EncodeToString(file.Content),
+			},
+		}
+
+		contentParts = append(contentParts, openai.ChatCompletionContentPartUnionParam{
+			OfImageURL: imageURL,
+		})
 	}
 
 	response, err := providers.OpenAI().Chat.Completions.New(ctx, openai.ChatCompletionNewParams{
@@ -88,11 +106,7 @@ func ExtractRecipeFromPhoto(ctx context.Context, providers config.Providers, pho
 			{
 				OfUser: &openai.ChatCompletionUserMessageParam{
 					Content: openai.ChatCompletionUserMessageParamContentUnion{
-						OfArrayOfContentParts: []openai.ChatCompletionContentPartUnionParam{
-							{
-								OfImageURL: imageURL,
-							},
-						},
+						OfArrayOfContentParts: contentParts,
 					},
 				},
 			},
@@ -103,7 +117,12 @@ func ExtractRecipeFromPhoto(ctx context.Context, providers config.Providers, pho
 		return nil, err
 	}
 
-	decoder := xml.NewDecoder(strings.NewReader(response.Choices[len(response.Choices)-1].Message.Content))
+	modelOutput := response.Choices[len(response.Choices)-1].Message.Content
+	if strings.HasPrefix(modelOutput, "<error>Not a recipe</error>") {
+		return nil, apicommon.NewUserFacingError("the provided photo is not a recipe")
+	}
+
+	decoder := xml.NewDecoder(strings.NewReader(modelOutput))
 
 	return parseRecipe(decoder)
 }
