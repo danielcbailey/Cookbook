@@ -99,6 +99,7 @@ func (tx *localTransaction) UpdateRecipe(recipe *models.Recipe) error {
 	existing.Servings = recipe.Servings
 	existing.Category = recipe.Category
 	existing.Protein = recipe.Protein
+	existing.Cuisine = recipe.Cuisine
 	existing.SuggestedMeal = recipe.SuggestedMeal
 	existing.Embedding = recipe.Embedding
 	existing.Tags = recipe.Tags

@@ -34,4 +34,12 @@ type Transaction interface {
 	DeleteRecipe(recipeID int64) error
 	CreateOrUpdateRecipeStep(step *models.RecipeStep) error
 	DeleteRecipeStep(step *models.RecipeStep) error
+
+	// Ingredients
+	SearchIngredientsBySemanticSimilarity(userID int64, embedding []float32, limit int) ([]*models.Ingredient, error)
+	GetIngredientCategories(userID int64) ([]string, error)
+	GetIngredientsByCategory(userID int64, category string) ([]*models.Ingredient, error)
+	CreateIngredient(ingredient *models.Ingredient) error
+	UpdateIngredient(ingredient *models.Ingredient) error
+	DeleteIngredient(ingredient *models.Ingredient) error
 }

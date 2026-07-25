@@ -8,6 +8,7 @@ import (
 	_ "image/png"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/danielcbailey/Cookbook/core/apicommon"
@@ -30,7 +31,7 @@ func ScrapeRecipeWeb(ctx context.Context, providers config.Providers, url string
 		return nil, apicommon.NewUserFacingError("failed to get site contents: %v", err)
 	} else if resp.StatusCode != http.StatusOK {
 		return nil, apicommon.NewUserFacingError("website responded with invalid status, expected OK. Got %s (%d)", resp.Status, resp.StatusCode)
-	} else if cType := resp.Header.Get("Content-Type"); cType != "text/html" {
+	} else if cType := resp.Header.Get("Content-Type"); strings.SplitN(cType, ";", 2)[0] != "text/html" {
 		return nil, apicommon.NewUserFacingError("invalid website content type, expected text/html. Got %s", cType)
 	}
 

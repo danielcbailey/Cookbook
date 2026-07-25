@@ -154,6 +154,10 @@ func parseRecipe(decoder *xml.Decoder) (*models.Recipe, error) {
 		case "meta":
 			ret.Author = getAttr(se, "author")
 			ret.Publisher = getAttr(se, "source")
+			ret.Category = getAttr(se, "category")
+			ret.Protein = getAttr(se, "protein")
+			ret.SuggestedMeal = getAttr(se, "suggested_meal")
+			ret.Cuisine = getAttr(se, "cuisine")
 			servingsStr := getAttr(se, "servings")
 			ret.Servings, err = strconv.Atoi(servingsStr)
 			if err != nil {

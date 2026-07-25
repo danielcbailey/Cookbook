@@ -2,7 +2,6 @@ package userapi
 
 import (
 	"crypto/sha256"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -70,7 +69,7 @@ func handleUserLogin(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Set-Cookie", "session="+token)
 
-	err = json.NewEncoder(w).Encode(&responseObj)
+	err = apicommon.WriteJSON(w, &responseObj)
 	if err != nil {
 		p.Log().Warn("failed to send login response", slog.Any("error", err))
 	}

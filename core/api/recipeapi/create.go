@@ -1,7 +1,6 @@
 package recipeapi
 
 import (
-	"encoding/json"
 	"io"
 	"log/slog"
 	"net/http"
@@ -14,7 +13,7 @@ import (
 )
 
 type RecipeWebImportRequest struct {
-	URL string
+	URL string `json:"url"`
 }
 
 func handleRecipeWebImport(w http.ResponseWriter, r *http.Request) {
@@ -68,7 +67,7 @@ func handleRecipeWebImport(w http.ResponseWriter, r *http.Request) {
 		tx.Commit()
 	}
 
-	err = json.NewEncoder(w).Encode(recipe)
+	err = apicommon.WriteJSON(w, recipe)
 	if err != nil {
 		p.Log().Warn("failed to write response", slog.Any("error", err))
 	}
@@ -149,7 +148,7 @@ func handleRecipePhotoImport(w http.ResponseWriter, r *http.Request) {
 		tx.Commit()
 	}
 
-	err = json.NewEncoder(w).Encode(recipe)
+	err = apicommon.WriteJSON(w, recipe)
 	if err != nil {
 		p.Log().Warn("failed to write response", slog.Any("error", err))
 	}

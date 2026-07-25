@@ -4,6 +4,7 @@ type Ingredient struct {
 	ID           int64     `json:"id"`
 	UserID       int64     `json:"user_id"`
 	Name         string    `json:"name"`
+	Category     string    `json:"category"`
 	FoodKeeperID int64     `json:"food_keeper_id,omitempty"`
 	Embedding    []float32 `json:"embedding,omitempty"`
 }

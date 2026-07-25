@@ -48,6 +48,7 @@ type Recipe struct {
 
 	Category      string      `json:"category"`
 	Protein       string      `json:"protein"`
+	Cuisine       string      `json:"cuisine"`
 	SuggestedMeal string      `json:"suggested_meal"`
 	Tags          []RecipeTag `json:"tags"`
 	Embedding     []float32   `json:"embedding,omitempty"`

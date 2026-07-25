@@ -2,29 +2,27 @@ package config
 
 import (
 	"fmt"
-	"os"
 
-	"gopkg.in/yaml.v3"
+	"github.com/ilyakaznacheev/cleanenv"
+	"github.com/joho/godotenv"
 )
 
 type Config struct {
-	OpenAIKey             string `yaml:"openai_key"`
-	TokenExpirySeconds    int    `yaml:"token_expiry_seconds"`
-	RecipeImportEnabled   bool   `yaml:"recipe_import_enabled"`
-	SemanticSearchEnabled bool   `yaml:"semantic_search_enabled"`
+	OpenAIKey             string `yaml:"openAIKey" env:"OPENAI_KEY"`
+	TokenExpirySeconds    int    `yaml:"tokenExpirySeconds"`
+	RecipeImportEnabled   bool   `yaml:"recipeImportEnabled"`
+	SemanticSearchEnabled bool   `yaml:"semanticSearchEnabled"`
+	HTTPPort              int    `yaml:"httpPort"`
 }
 
-var config *Config
-
 func LoadConfig() (*Config, error) {
-	config = &Config{}
-	b, e := os.ReadFile("config.yaml")
-	if e != nil {
-		return nil, fmt.Errorf("failed to read config.yaml: %w", e)
-	}
+	// Load .env if present; ignore if missing
+	_ = godotenv.Load()
 
-	if e := yaml.Unmarshal(b, config); e != nil {
-		return nil, fmt.Errorf("failed to unmarshal config.yaml: %w", e)
+	config := &Config{}
+	err := cleanenv.ReadConfig("config.yaml", config)
+	if err != nil {
+		return nil, err
 	}
 
 	return config, checkConfig(config)

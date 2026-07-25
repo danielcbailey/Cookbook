@@ -12,18 +12,20 @@ import (
 const storeFile = "store.json"
 
 type store struct {
-	NextID  int64                      `json:"next_id"`
-	Users   map[int64]models.User      `json:"users"`
-	Recipes map[int64]models.Recipe    `json:"recipes"`
-	Tags    map[int64]models.RecipeTag `json:"tags"`
+	NextID      int64                          `json:"next_id"`
+	Users       map[int64]models.User          `json:"users"`
+	Recipes     map[int64]models.Recipe        `json:"recipes"`
+	Tags        map[int64]models.RecipeTag     `json:"tags"`
+	Ingredients map[int64]models.Ingredient    `json:"ingredients"`
 }
 
 func newStore() *store {
 	return &store{
-		NextID:  1,
-		Users:   make(map[int64]models.User),
-		Recipes: make(map[int64]models.Recipe),
-		Tags:    make(map[int64]models.RecipeTag),
+		NextID:      1,
+		Users:       make(map[int64]models.User),
+		Recipes:     make(map[int64]models.Recipe),
+		Tags:        make(map[int64]models.RecipeTag),
+		Ingredients: make(map[int64]models.Ingredient),
 	}
 }
 
@@ -35,10 +37,11 @@ func (s *store) nextID() int64 {
 
 func (s *store) deepCopy() *store {
 	cp := &store{
-		NextID:  s.NextID,
-		Users:   make(map[int64]models.User, len(s.Users)),
-		Recipes: make(map[int64]models.Recipe, len(s.Recipes)),
-		Tags:    make(map[int64]models.RecipeTag, len(s.Tags)),
+		NextID:      s.NextID,
+		Users:       make(map[int64]models.User, len(s.Users)),
+		Recipes:     make(map[int64]models.Recipe, len(s.Recipes)),
+		Tags:        make(map[int64]models.RecipeTag, len(s.Tags)),
+		Ingredients: make(map[int64]models.Ingredient, len(s.Ingredients)),
 	}
 	for k, v := range s.Users {
 		cp.Users[k] = v
@@ -48,6 +51,9 @@ func (s *store) deepCopy() *store {
 	}
 	for k, v := range s.Tags {
 		cp.Tags[k] = v
+	}
+	for k, v := range s.Ingredients {
+		cp.Ingredients[k] = copyIngredientModel(v)
 	}
 	return cp
 }
@@ -61,6 +67,9 @@ func (s *store) initMaps() {
 	}
 	if s.Tags == nil {
 		s.Tags = make(map[int64]models.RecipeTag)
+	}
+	if s.Ingredients == nil {
+		s.Ingredients = make(map[int64]models.Ingredient)
 	}
 }
 
