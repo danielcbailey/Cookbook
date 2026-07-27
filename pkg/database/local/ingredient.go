@@ -65,10 +65,10 @@ func (tx *localTransaction) GetIngredientsByCategory(userID int64, category stri
 	return out, nil
 }
 
-func (tx *localTransaction) CreateIngredient(ingredient *models.Ingredient) error {
+func (tx *localTransaction) CreateIngredient(ingredient *models.Ingredient) (int64, error) {
 	ingredient.ID = tx.data.nextID()
 	tx.data.Ingredients[ingredient.ID] = *ingredient
-	return nil
+	return ingredient.ID, nil
 }
 
 func (tx *localTransaction) UpdateIngredient(ingredient *models.Ingredient) error {

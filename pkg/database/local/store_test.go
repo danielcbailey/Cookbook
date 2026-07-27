@@ -30,7 +30,7 @@ func TestPersistenceAcrossRestarts(t *testing.T) {
 		t.Fatal(err)
 	}
 	user := testUser()
-	if err := tx.CreateUser(&user); err != nil {
+	if _, err := tx.CreateUser(&user); err != nil {
 		t.Fatal(err)
 	}
 	if err := tx.Commit(); err != nil {

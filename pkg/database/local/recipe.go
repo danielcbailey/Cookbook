@@ -64,7 +64,7 @@ func (tx *localTransaction) GetRecipeByID(recipeID int64) (*models.Recipe, error
 	return &cp, nil
 }
 
-func (tx *localTransaction) CreateRecipe(recipe *models.Recipe) error {
+func (tx *localTransaction) CreateRecipe(recipe *models.Recipe) (int64, error) {
 	recipe.ID = tx.data.nextID()
 	now := time.Now().Unix()
 	recipe.CreatedAt = now
@@ -80,7 +80,7 @@ func (tx *localTransaction) CreateRecipe(recipe *models.Recipe) error {
 		recipe.Ingredients[i].ID = tx.data.nextID()
 	}
 	tx.data.Recipes[recipe.ID] = *recipe
-	return nil
+	return recipe.ID, nil
 }
 
 func (tx *localTransaction) UpdateRecipe(recipe *models.Recipe) error {
@@ -114,10 +114,10 @@ func (tx *localTransaction) DeleteRecipe(recipeID int64) error {
 	return nil
 }
 
-func (tx *localTransaction) CreateOrUpdateRecipeStep(step *models.RecipeStep) error {
+func (tx *localTransaction) CreateOrUpdateRecipeStep(step *models.RecipeStep) (int64, error) {
 	recipe, ok := tx.data.Recipes[step.RecipeID]
 	if !ok {
-		return fmt.Errorf("recipe %d: %w", step.RecipeID, database.ErrNotFound)
+		return 0, fmt.Errorf("recipe %d: %w", step.RecipeID, database.ErrNotFound)
 	}
 
 	idx := -1
@@ -152,7 +152,7 @@ func (tx *localTransaction) CreateOrUpdateRecipeStep(step *models.RecipeStep) er
 
 	recipe.Steps[idx] = *step
 	tx.data.Recipes[step.RecipeID] = recipe
-	return nil
+	return step.ID, nil
 }
 
 func (tx *localTransaction) DeleteRecipeStep(step *models.RecipeStep) error {

@@ -12,20 +12,22 @@ import (
 const storeFile = "store.json"
 
 type store struct {
-	NextID      int64                          `json:"next_id"`
-	Users       map[int64]models.User          `json:"users"`
-	Recipes     map[int64]models.Recipe        `json:"recipes"`
-	Tags        map[int64]models.RecipeTag     `json:"tags"`
-	Ingredients map[int64]models.Ingredient    `json:"ingredients"`
+	NextID             int64                              `json:"next_id"`
+	Users              map[int64]models.User              `json:"users"`
+	Recipes            map[int64]models.Recipe            `json:"recipes"`
+	Tags               map[int64]models.RecipeTag         `json:"tags"`
+	Ingredients        map[int64]models.Ingredient        `json:"ingredients"`
+	FoodKeeperProducts map[int64]models.FoodKeeperProduct `json:"food_keeper_products"`
 }
 
 func newStore() *store {
 	return &store{
-		NextID:      1,
-		Users:       make(map[int64]models.User),
-		Recipes:     make(map[int64]models.Recipe),
-		Tags:        make(map[int64]models.RecipeTag),
-		Ingredients: make(map[int64]models.Ingredient),
+		NextID:             1,
+		Users:              make(map[int64]models.User),
+		Recipes:            make(map[int64]models.Recipe),
+		Tags:               make(map[int64]models.RecipeTag),
+		Ingredients:        make(map[int64]models.Ingredient),
+		FoodKeeperProducts: make(map[int64]models.FoodKeeperProduct),
 	}
 }
 
@@ -37,11 +39,12 @@ func (s *store) nextID() int64 {
 
 func (s *store) deepCopy() *store {
 	cp := &store{
-		NextID:      s.NextID,
-		Users:       make(map[int64]models.User, len(s.Users)),
-		Recipes:     make(map[int64]models.Recipe, len(s.Recipes)),
-		Tags:        make(map[int64]models.RecipeTag, len(s.Tags)),
-		Ingredients: make(map[int64]models.Ingredient, len(s.Ingredients)),
+		NextID:             s.NextID,
+		Users:              make(map[int64]models.User, len(s.Users)),
+		Recipes:            make(map[int64]models.Recipe, len(s.Recipes)),
+		Tags:               make(map[int64]models.RecipeTag, len(s.Tags)),
+		Ingredients:        make(map[int64]models.Ingredient, len(s.Ingredients)),
+		FoodKeeperProducts: make(map[int64]models.FoodKeeperProduct, len(s.FoodKeeperProducts)),
 	}
 	for k, v := range s.Users {
 		cp.Users[k] = v
@@ -54,6 +57,9 @@ func (s *store) deepCopy() *store {
 	}
 	for k, v := range s.Ingredients {
 		cp.Ingredients[k] = copyIngredientModel(v)
+	}
+	for k, v := range s.FoodKeeperProducts {
+		cp.FoodKeeperProducts[k] = copyFoodKeeperProduct(v)
 	}
 	return cp
 }
@@ -70,6 +76,9 @@ func (s *store) initMaps() {
 	}
 	if s.Ingredients == nil {
 		s.Ingredients = make(map[int64]models.Ingredient)
+	}
+	if s.FoodKeeperProducts == nil {
+		s.FoodKeeperProducts = make(map[int64]models.FoodKeeperProduct)
 	}
 }
 

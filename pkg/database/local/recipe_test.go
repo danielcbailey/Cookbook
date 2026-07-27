@@ -24,7 +24,7 @@ func setupRecipeTest(t *testing.T) (database.Transaction, models.User) {
 	t.Cleanup(func() { tx.Rollback() })
 
 	u := testUser()
-	if err := tx.CreateUser(&u); err != nil {
+	if _, err := tx.CreateUser(&u); err != nil {
 		t.Fatal(err)
 	}
 	return tx, u
@@ -34,12 +34,16 @@ func TestCreateRecipe_AssignsIDAndTimestamps(t *testing.T) {
 	tx, u := setupRecipeTest(t)
 
 	r := testRecipe(u.ID)
-	if err := tx.CreateRecipe(&r); err != nil {
+	id, err := tx.CreateRecipe(&r)
+	if err != nil {
 		t.Fatal(err)
 	}
 
-	if r.ID == 0 {
+	if id == 0 {
 		t.Fatal("expected non-zero ID")
+	}
+	if r.ID != id {
+		t.Fatalf("expected r.ID %d to match returned ID %d", r.ID, id)
 	}
 	if r.CreatedAt == 0 {
 		t.Fatal("expected non-zero CreatedAt")
@@ -72,7 +76,7 @@ func TestGetRecipeByID_FullGraph(t *testing.T) {
 			{Index: 0, StartTime: 10, Unit: models.RecipeTimeUnitMinutes},
 		},
 	}
-	if err := tx.CreateOrUpdateRecipeStep(&step); err != nil {
+	if _, err := tx.CreateOrUpdateRecipeStep(&step); err != nil {
 		t.Fatal(err)
 	}
 
@@ -310,11 +314,15 @@ func TestCreateOrUpdateRecipeStep_Create(t *testing.T) {
 			},
 		},
 	}
-	if err := tx.CreateOrUpdateRecipeStep(&step); err != nil {
+	id, err := tx.CreateOrUpdateRecipeStep(&step)
+	if err != nil {
 		t.Fatal(err)
 	}
-	if step.ID == 0 {
+	if id == 0 {
 		t.Fatal("step should get an ID")
+	}
+	if step.ID != id {
+		t.Fatalf("expected step.ID %d to match returned ID %d", step.ID, id)
 	}
 	if step.Ingredients[0].ID == 0 {
 		t.Fatal("ingredient should get an ID")
@@ -333,14 +341,22 @@ func TestCreateOrUpdateRecipeStep_Update(t *testing.T) {
 	tx.CreateRecipe(&r)
 
 	step := models.RecipeStep{RecipeID: r.ID, Index: 0, Title: "Original"}
-	tx.CreateOrUpdateRecipeStep(&step)
-	origID := step.ID
+	origID, err := tx.CreateOrUpdateRecipeStep(&step)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	step2 := models.RecipeStep{RecipeID: r.ID, Index: 0, Title: "Updated"}
-	tx.CreateOrUpdateRecipeStep(&step2)
+	gotID, err := tx.CreateOrUpdateRecipeStep(&step2)
+	if err != nil {
+		t.Fatal(err)
+	}
 
-	if step2.ID != origID {
-		t.Fatalf("upsert should reuse step ID: got %d, want %d", step2.ID, origID)
+	if gotID != origID {
+		t.Fatalf("upsert should reuse step ID: got %d, want %d", gotID, origID)
+	}
+	if step2.ID != gotID {
+		t.Fatalf("expected step2.ID %d to match returned ID %d", step2.ID, gotID)
 	}
 
 	got, _ := tx.GetRecipeByID(r.ID)
@@ -499,7 +515,7 @@ func BenchmarkSearchRecipesBySemanticSimilarity_1000(b *testing.B) {
 	}
 
 	u := models.User{Email: "bench@test.com", PasswordHash: "h"}
-	if err := tx.CreateUser(&u); err != nil {
+	if _, err := tx.CreateUser(&u); err != nil {
 		b.Fatal(err)
 	}
 
@@ -510,7 +526,7 @@ func BenchmarkSearchRecipesBySemanticSimilarity_1000(b *testing.B) {
 			Title:     "Recipe",
 			Embedding: randEmbedding(rng, dims),
 		}
-		if err := tx.CreateRecipe(&r); err != nil {
+		if _, err := tx.CreateRecipe(&r); err != nil {
 			b.Fatal(err)
 		}
 	}

@@ -6,6 +6,7 @@ import (
 	"github.com/danielcbailey/Cookbook/core/models"
 	"github.com/danielcbailey/Cookbook/pkg/cache"
 	"github.com/danielcbailey/Cookbook/pkg/database"
+	"github.com/danielcbailey/Cookbook/pkg/objectstore"
 	"github.com/openai/openai-go/v3"
 )
 
@@ -22,6 +23,9 @@ type Providers interface {
 	DB() database.Database
 	WithDB(db database.Database) Providers
 
+	ObjectStore() objectstore.ObjectStore
+	WithObjectStore(store objectstore.ObjectStore) Providers
+
 	User() *models.User
 	WithUser(user *models.User) Providers
 
@@ -34,6 +38,7 @@ type providers struct {
 	openAIClient *openai.Client
 	cache        cache.Cache
 	db           database.Database
+	objectStore  objectstore.ObjectStore
 	user         *models.User
 	log          *slog.Logger
 }
@@ -79,6 +84,16 @@ func (p *providers) DB() database.Database {
 func (p *providers) WithDB(db database.Database) Providers {
 	newProviders := p.copy()
 	newProviders.db = db
+	return newProviders
+}
+
+func (p *providers) ObjectStore() objectstore.ObjectStore {
+	return p.objectStore
+}
+
+func (p *providers) WithObjectStore(store objectstore.ObjectStore) Providers {
+	newProviders := p.copy()
+	newProviders.objectStore = store
 	return newProviders
 }
 

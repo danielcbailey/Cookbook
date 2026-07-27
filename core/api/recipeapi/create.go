@@ -16,6 +16,10 @@ type RecipeWebImportRequest struct {
 	URL string `json:"url"`
 }
 
+type RecipeID struct {
+	ID int64 `json:"id"`
+}
+
 func handleRecipeWebImport(w http.ResponseWriter, r *http.Request) {
 	if !apicommon.ExpectedMethod(w, r, "recipe web import", http.MethodPost) {
 		return
@@ -161,4 +165,40 @@ func checkUserImportLimit(user *models.User) bool {
 		usage = 0
 	}
 	return usage < user.MaxMonthlyRecipeExtraction
+}
+
+func handleRecipeSave(w http.ResponseWriter, r *http.Request) {
+	if !apicommon.ExpectedMethod(w, r, "recipe web import", http.MethodPost) {
+		return
+	}
+
+	recipe, ok := apicommon.DecodeRequest[models.Recipe](w, r, 256*apicommon.KiB)
+	if !ok {
+		return
+	}
+
+	p := apicommon.MustHaveProvidersAndUser(r)
+
+	id, err := recipes.SaveRecipe(r.Context(), p, &recipe)
+	if err != nil {
+		placeholder := "internal server error"
+		sanitized := apicommon.SanitizeError(err, placeholder)
+		if placeholder == sanitized {
+			p.Log().Error("failed to save recipe", slog.Any("error", err))
+			http.Error(w, placeholder, http.StatusInternalServerError)
+			return
+		}
+
+		http.Error(w, sanitized, http.StatusBadRequest)
+		return
+	}
+
+	respObj := &RecipeID{
+		ID: id,
+	}
+
+	err = apicommon.WriteJSON(w, respObj)
+	if err != nil {
+		p.Log().Warn("failed to write response", slog.Any("error", err))
+	}
 }

@@ -35,14 +35,14 @@ func (tx *localTransaction) GetUserByID(userID int64) (*models.User, error) {
 	return &u, nil
 }
 
-func (tx *localTransaction) CreateUser(user *models.User) error {
+func (tx *localTransaction) CreateUser(user *models.User) (int64, error) {
 	now := time.Now()
 	user.ID = tx.data.nextID()
 	user.CreatedAt = now
 	user.UpdatedAt = now
 	user.LastUsageReset = now
 	tx.data.Users[user.ID] = *user
-	return nil
+	return user.ID, nil
 }
 
 func (tx *localTransaction) UpdateUser(user *models.User) error {

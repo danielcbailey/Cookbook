@@ -23,19 +23,14 @@ func NewRedisCache(connStr string) (*RedisCache, error) {
 	}, nil
 }
 
+// Get returns a not-found error (detectable via ErrIsNotFound) for missing
+// keys, per the Cache interface contract.
 func (r *RedisCache) Get(ctx context.Context, key string) (string, error) {
-	val, err := r.client.Get(ctx, key).Result()
-	if errors.Is(err, redis.Nil) {
-		return "", nil
-	}
-	return val, err
+	return r.client.Get(ctx, key).Result()
 }
 
 func (r *RedisCache) GetInterface(ctx context.Context, key string, ptr any) error {
 	val, err := r.client.Get(ctx, key).Result()
-	if errors.Is(err, redis.Nil) {
-		return nil
-	}
 	if err != nil {
 		return err
 	}

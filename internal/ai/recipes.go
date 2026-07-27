@@ -35,7 +35,7 @@ func ExtractRecipeFromHTML(ctx context.Context, providers config.Providers, text
 	prompt := getRecipeExtractionPrompt(recipeMediumHTML)
 
 	response, err := providers.OpenAI().Chat.Completions.New(ctx, openai.ChatCompletionNewParams{
-		Model:           openai.ChatModelGPT5_6Terra,
+		Model:           openai.ChatModelGPT5_6Sol,
 		Temperature:     param.NewOpt(0.2),
 		ReasoningEffort: openai.ReasoningEffortNone,
 		Messages: []openai.ChatCompletionMessageParamUnion{
@@ -92,7 +92,7 @@ func ExtractRecipeFromPhotos(ctx context.Context, providers config.Providers, fi
 	}
 
 	response, err := providers.OpenAI().Chat.Completions.New(ctx, openai.ChatCompletionNewParams{
-		Model:           openai.ChatModelGPT5_6Terra,
+		Model:           openai.ChatModelGPT5_6Sol,
 		Temperature:     param.NewOpt(0.2),
 		ReasoningEffort: openai.ReasoningEffortNone,
 		Messages: []openai.ChatCompletionMessageParamUnion{

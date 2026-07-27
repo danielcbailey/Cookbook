@@ -17,11 +17,14 @@ import (
 const cacheDuration = 7 * 24 * time.Hour // one week
 
 // ConvertToEmbedding takes a string and returns a slice of 1536 float32's representing the embedding of the input text.
+// The cache provider is optional; when nil, embeddings are always fetched from OpenAI.
 func ConvertToEmbedding(ctx context.Context, providers config.Providers, text string) ([]float32, error) {
-	if embedding, err := getCacheEmbedding(ctx, providers, text); embedding != nil {
-		return embedding, nil
-	} else if err != nil {
-		providers.Log().Warn("failed to check embedding cache", slog.Any("error", err))
+	if providers.Cache() != nil {
+		if embedding, err := getCacheEmbedding(ctx, providers, text); embedding != nil {
+			return embedding, nil
+		} else if err != nil {
+			providers.Log().Warn("failed to check embedding cache", slog.Any("error", err))
+		}
 	}
 
 	response, err := providers.OpenAI().Embeddings.New(ctx, openai.EmbeddingNewParams{
@@ -41,9 +44,11 @@ func ConvertToEmbedding(ctx context.Context, providers config.Providers, text st
 		ret[i] = float32(v)
 	}
 
-	err = cacheEmbedding(ctx, providers, text, ret)
-	if err != nil {
-		providers.Log().Warn("failed to write to embedding cache", slog.Any("error", err))
+	if providers.Cache() != nil {
+		err = cacheEmbedding(ctx, providers, text, ret)
+		if err != nil {
+			providers.Log().Warn("failed to write to embedding cache", slog.Any("error", err))
+		}
 	}
 
 	return ret, nil
@@ -62,6 +67,11 @@ func getCacheEmbedding(ctx context.Context, providers config.Providers, input st
 		} else {
 			return nil, err
 		}
+	}
+	if str == "" {
+		// An empty value would decode to a zero-length embedding that the
+		// caller would mistake for a cache hit; treat it as a miss.
+		return nil, nil
 	}
 
 	return bytesToFloatSlice([]byte(str))

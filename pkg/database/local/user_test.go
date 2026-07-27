@@ -18,11 +18,15 @@ func TestCreateUser_AssignsID(t *testing.T) {
 	defer tx.Rollback()
 
 	u := testUser()
-	if err := tx.CreateUser(&u); err != nil {
+	id, err := tx.CreateUser(&u)
+	if err != nil {
 		t.Fatal(err)
 	}
-	if u.ID == 0 {
+	if id == 0 {
 		t.Fatal("expected non-zero ID")
+	}
+	if u.ID != id {
+		t.Fatalf("expected u.ID %d to match returned ID %d", u.ID, id)
 	}
 }
 
