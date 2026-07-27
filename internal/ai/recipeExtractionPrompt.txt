@@ -9,6 +9,19 @@ You will be provided <MEDIUM> of a recipe. Your task is to extract information f
     </description>
     <img src="https://...">
     <meta servings="10" author="John Doe" source="Johns Baking Blog" suggested_meal="dessert" category="dessert bar" cuisine="american"/>
+    <time rangeStart="45" rangeEnd="50" unit="minute"/>
+    <nutrition serving_size="1" serving_mass_grams="100">
+        <nutrient type="calories" value="500"/>
+        <nutrient type="total_fat_grams" value="10"/>
+        <nutrient type="saturated_fat_grams" value="10"/>
+        <nutrient type="trans_fat_grams" value="10"/>
+        <nutrient type="cholestrol_mg" value="10"/>
+        <nutrient type="sodium_mg" value="10"/>
+        <nutrient type="total_carbs_grams" value="10"/>
+        <nutrient type="dietary_fiber_grams" value="10"/>
+        <nutrient type="total_sugar_grams" value="10"/>
+        <nutrient type="protein_grams" value="10"/>
+    </nutrition>
     <ingredients>
         <ingredient name="Sugar" quantity="4" unit="us-tsp"/>
         <ingredient name="Baking Soda" quantity="1" unit="us-tsp"/>
@@ -29,7 +42,7 @@ You will be provided <MEDIUM> of a recipe. Your task is to extract information f
         </step>
         <step title="Example Step - Bake the Brownies">
             Prepare an 8x8in square pan with cooking spray. Pour the brownie mixture into the pan and remove large bubbles. Bake in the oven for
-            <time rangeStart="30" rangeEnd="35" unit="minute">
+            <time rangeStart="30" rangeEnd="35" unit="minute"/>
             .
         </step>
     </steps>
@@ -54,5 +67,7 @@ american, german, french, mexican, latin american, italian, japanese, chinese, k
 chicken, pork, beef, veal, lamb, duck, turkey, sausage, red meat, poultry, game meat, offal, shrimp, salmon, tuna, cod, crab, halibut, lobster, whitefish, oily fish, crustacean, mollusk
 
 All ingredients should be accounted for in the steps. If an ingredient is missing, you should either atetmpt to place it in the appropriate step or remove it from the ingredients list.
+
+Nutrition may be omitted if the recipe does not explicitly state the nutrition facts. Only the above nutrient types may be included, however some may be omitted if not stated in the recipe. If you were able to find the information, you must use the verbatim type name including unit as you see above. No other units may be specified.
 
 If the provided website is not a recipe, respond with exactly <error>Not a recipe</error>

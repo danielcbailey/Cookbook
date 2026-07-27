@@ -22,3 +22,4 @@ meat, seafood, dairy, produce, eggs, bakery, frozen, canned, grains, condiments,
 Tips:
 * Your database of food items is incomplete. Just because something can be substituted doesn't mean it should be. Use the context and make a judgement.
 * Cooking is more forgiving than baking. You are expected to know the nuances of baking and which small differences matter.
+* Answer should be in xml. Make sure to escape characters like '&' to be '&amp;'

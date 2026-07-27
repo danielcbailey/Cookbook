@@ -97,7 +97,6 @@ func ingredientAssociationBase(ctx context.Context, providers config.Providers, 
 	}
 
 	modelOutput := response.Choices[len(response.Choices)-1].Message.Content
-	modelOutput = strings.ReplaceAll(modelOutput, "&", "&amp;")
 
 	var answer struct {
 		XMLName xml.Name `xml:"answer"`

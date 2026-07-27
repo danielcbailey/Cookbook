@@ -163,6 +163,12 @@ func parseRecipe(decoder *xml.Decoder) (*models.Recipe, error) {
 			if err != nil {
 				err = fmt.Errorf("meta failed to parse servings '%s': %w", servingsStr, err)
 			}
+		case "time":
+			// Times nested in steps are consumed by parseStep, so a <time> seen
+			// here is the recipe's total time.
+			ret.TotalTime, err = parseTimeElement(se)
+		case "nutrition":
+			ret.Nutrition, err = parseNutrition(decoder, se)
 		case "ingredients":
 			ret.Ingredients, err = parseIngredients(decoder)
 		case "steps":
@@ -239,6 +245,90 @@ func parseTimeElement(el xml.StartElement) (models.RecipeTime, error) {
 		t.EndTime = float32(f)
 	}
 	return t, nil
+}
+
+// parseNutrition reads a <nutrition> element and its <nutrient> children. The
+// prompt lets the model omit any nutrient the source recipe does not state, so
+// missing attributes and missing nutrients are left at zero rather than
+// treated as errors. Values that are present but unparseable are still errors.
+func parseNutrition(decoder *xml.Decoder, el xml.StartElement) (models.RecipeNutrition, error) {
+	n := models.RecipeNutrition{}
+
+	if v := getAttr(el, "serving_size"); v != "" {
+		f, err := strconv.ParseFloat(v, 32)
+		if err != nil {
+			return n, fmt.Errorf("nutrition failed to parse serving_size '%s': %w", v, err)
+		}
+		n.NutritionServings = float32(f)
+	}
+	if v := getAttr(el, "serving_mass_grams"); v != "" {
+		f, err := strconv.ParseFloat(v, 32)
+		if err != nil {
+			return n, fmt.Errorf("nutrition failed to parse serving_mass_grams '%s': %w", v, err)
+		}
+		n.NutritionServingMass = float32(f)
+		n.NutritionServingUnit = models.IngredientUnitGrams
+	}
+
+	for {
+		tok, err := decoder.Token()
+		if err != nil {
+			return n, err
+		}
+		switch t := tok.(type) {
+		case xml.StartElement:
+			if t.Name.Local == "nutrient" {
+				if err := applyNutrient(&n, t); err != nil {
+					return n, err
+				}
+			}
+		case xml.EndElement:
+			if t.Name.Local == "nutrition" {
+				return n, nil
+			}
+		}
+	}
+}
+
+// applyNutrient records a single <nutrient> element on n. Unrecognized nutrient
+// types are skipped, matching how the other parsers ignore elements they do not
+// know about.
+func applyNutrient(n *models.RecipeNutrition, el xml.StartElement) error {
+	nutrientType := getAttr(el, "type")
+	valueStr := getAttr(el, "value")
+	if valueStr == "" {
+		return nil
+	}
+
+	value, err := strconv.ParseFloat(valueStr, 32)
+	if err != nil {
+		return fmt.Errorf("nutrient '%s' failed to parse value '%s': %w", nutrientType, valueStr, err)
+	}
+
+	switch nutrientType {
+	case "calories":
+		n.Calories = int(value)
+	case "total_fat_grams":
+		n.TotalFatGrams = float32(value)
+	case "saturated_fat_grams":
+		n.SaturatedFatGrams = float32(value)
+	case "trans_fat_grams":
+		n.TransFatGrams = float32(value)
+	case "cholestrol_mg":
+		n.CholestrolMilligrams = float32(value)
+	case "sodium_mg":
+		n.SodiumMilligrams = float32(value)
+	case "total_carbs_grams":
+		n.TotalCarbsGrams = float32(value)
+	case "dietary_fiber_grams":
+		n.DietaryFiberGrams = float32(value)
+	case "total_sugar_grams":
+		n.TotalSugarGrams = float32(value)
+	case "protein_grams":
+		n.ProteinGrams = float32(value)
+	}
+
+	return nil
 }
 
 func parseIngredients(decoder *xml.Decoder) ([]models.RecipeIngredient, error) {

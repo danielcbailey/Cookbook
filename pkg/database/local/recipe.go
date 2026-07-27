@@ -103,6 +103,8 @@ func (tx *localTransaction) UpdateRecipe(recipe *models.Recipe) error {
 	existing.SuggestedMeal = recipe.SuggestedMeal
 	existing.Embedding = recipe.Embedding
 	existing.Tags = recipe.Tags
+	existing.TotalTime = recipe.TotalTime
+	existing.Nutrition = recipe.Nutrition
 	existing.UpdatedAt = time.Now().Unix()
 
 	tx.data.Recipes[recipe.ID] = existing
@@ -306,5 +308,6 @@ func copyRecipeShallow(r models.Recipe) models.Recipe {
 	r.Steps = nil
 	r.Ingredients = nil
 	r.Embedding = nil
+	r.Nutrition = models.RecipeNutrition{}
 	return r
 }

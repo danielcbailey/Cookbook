@@ -13,3 +13,6 @@ YOUR EXACT RESPONSE:
 If you aren't satisfied with any option:
 YOUR EXACT RESPONSE:
 <answer>Chicken Breast</answer>
+
+Tips:
+* Answer should be in xml. Make sure to escape characters like '&' to be '&amp;'
