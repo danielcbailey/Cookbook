@@ -65,6 +65,15 @@ func (tx *localTransaction) GetIngredientsByCategory(userID int64, category stri
 	return out, nil
 }
 
+func (tx *localTransaction) GetIngredientByID(userID int64, ID int64) (*models.Ingredient, error) {
+	ing, ok := tx.data.Ingredients[ID]
+	if !ok || (ing.UserID != userID && ing.UserID != 0) {
+		return nil, fmt.Errorf("ingredient %d: %w", ID, database.ErrNotFound)
+	}
+	cp := copyIngredientModel(ing)
+	return &cp, nil
+}
+
 func (tx *localTransaction) CreateIngredient(ingredient *models.Ingredient) (int64, error) {
 	ingredient.ID = tx.data.nextID()
 	tx.data.Ingredients[ingredient.ID] = *ingredient

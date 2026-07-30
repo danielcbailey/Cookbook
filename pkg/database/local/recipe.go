@@ -4,30 +4,21 @@ import (
 	"fmt"
 	"math"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/danielcbailey/Cookbook/core/models"
 	"github.com/danielcbailey/Cookbook/pkg/database"
 )
 
-func (tx *localTransaction) ListRecipesByUserID(userID int64) ([]*models.Recipe, error) {
-	var out []*models.Recipe
-	for _, r := range tx.data.Recipes {
-		if r.UserID == userID {
-			cp := copyRecipeShallow(r)
-			out = append(out, &cp)
-		}
-	}
-	sort.Slice(out, func(i, j int) bool {
-		if out[i].CreatedAt != out[j].CreatedAt {
-			return out[i].CreatedAt > out[j].CreatedAt
-		}
-		return out[i].ID > out[j].ID
+func (tx *localTransaction) ListRecipesByUserID(userID int64, offset, limit int) ([]*models.RecipeListing, error) {
+	out := tx.listingsWhere(func(r models.Recipe) bool {
+		return r.UserID == userID
 	})
-	return out, nil
+	return applyPaging(out, offset, limit), nil
 }
 
-func (tx *localTransaction) SearchRecipesBySemanticSimilarity(userID int64, embedding []float32, limit int) ([]*models.Recipe, error) {
+func (tx *localTransaction) ListRecipesBySemanticSimilarity(userID int64, embedding []float32, limit int) ([]*models.RecipeListing, error) {
 	type scored struct {
 		recipe models.Recipe
 		score  float32
@@ -47,12 +38,53 @@ func (tx *localTransaction) SearchRecipesBySemanticSimilarity(userID int64, embe
 	if limit > 0 && len(candidates) > limit {
 		candidates = candidates[:limit]
 	}
-	out := make([]*models.Recipe, len(candidates))
+	out := make([]*models.RecipeListing, len(candidates))
 	for i, c := range candidates {
-		cp := copyRecipeShallow(c.recipe)
-		out[i] = &cp
+		l := recipeListing(c.recipe)
+		out[i] = &l
 	}
 	return out, nil
+}
+
+func (tx *localTransaction) ListRecipesByCategory(userID int64, category string, limit int) ([]*models.RecipeListing, error) {
+	out := tx.listingsWhere(func(r models.Recipe) bool {
+		return r.UserID == userID && r.Category == category
+	})
+	return applyPaging(out, 0, limit), nil
+}
+
+func (tx *localTransaction) ListRecipesByProtein(userID int64, protein string, limit int) ([]*models.RecipeListing, error) {
+	out := tx.listingsWhere(func(r models.Recipe) bool {
+		return r.UserID == userID && r.Protein == protein
+	})
+	return applyPaging(out, 0, limit), nil
+}
+
+func (tx *localTransaction) ListRecipesByMeal(userID int64, meal string, limit int) ([]*models.RecipeListing, error) {
+	out := tx.listingsWhere(func(r models.Recipe) bool {
+		return r.UserID == userID && r.SuggestedMeal == meal
+	})
+	return applyPaging(out, 0, limit), nil
+}
+
+func (tx *localTransaction) ListRecipesByTitleSearch(userID int64, query string, limit int) ([]*models.RecipeListing, error) {
+	needle := strings.ToLower(query)
+	out := tx.listingsWhere(func(r models.Recipe) bool {
+		return r.UserID == userID && strings.Contains(strings.ToLower(r.Title), needle)
+	})
+	return applyPaging(out, 0, limit), nil
+}
+
+func (tx *localTransaction) ListRecipeCategories(userID int64) ([]string, error) {
+	return tx.distinctRecipeValues(userID, func(r models.Recipe) string { return r.Category }), nil
+}
+
+func (tx *localTransaction) ListRecipeProteins(userID int64) ([]string, error) {
+	return tx.distinctRecipeValues(userID, func(r models.Recipe) string { return r.Protein }), nil
+}
+
+func (tx *localTransaction) ListRecipeMealtimes(userID int64) ([]string, error) {
+	return tx.distinctRecipeValues(userID, func(r models.Recipe) string { return r.SuggestedMeal }), nil
 }
 
 func (tx *localTransaction) GetRecipeByID(recipeID int64) (*models.Recipe, error) {
@@ -301,13 +333,80 @@ func copyFloat32s(s []float32) []float32 {
 	return out
 }
 
-func copyRecipeShallow(r models.Recipe) models.Recipe {
-	tags := make([]models.RecipeTag, len(r.Tags))
-	copy(tags, r.Tags)
-	r.Tags = tags
-	r.Steps = nil
-	r.Ingredients = nil
-	r.Embedding = nil
-	r.Nutrition = models.RecipeNutrition{}
-	return r
+// recipeListing projects a stored recipe down to the fields a listing carries.
+func recipeListing(r models.Recipe) models.RecipeListing {
+	return models.RecipeListing{
+		ID:       r.ID,
+		UserID:   r.UserID,
+		Title:    r.Title,
+		ImageURL: r.ImageURL,
+		Servings: r.Servings,
+		Calories: r.Nutrition.Calories,
+		Time:     r.TotalTime,
+		Tags:     copyTags(r.Tags),
+	}
+}
+
+// listingsWhere collects the recipes matching keep, newest first. The store is a
+// map, so its iteration order is random and this sort is what makes results
+// stable; the tie-break on ID is what lets offset paging return disjoint pages
+// when several recipes share a CreatedAt.
+func (tx *localTransaction) listingsWhere(keep func(models.Recipe) bool) []*models.RecipeListing {
+	type entry struct {
+		listing   models.RecipeListing
+		createdAt int64
+	}
+	var entries []entry
+	for _, r := range tx.data.Recipes {
+		if keep(r) {
+			entries = append(entries, entry{listing: recipeListing(r), createdAt: r.CreatedAt})
+		}
+	}
+	sort.Slice(entries, func(i, j int) bool {
+		if entries[i].createdAt != entries[j].createdAt {
+			return entries[i].createdAt > entries[j].createdAt
+		}
+		return entries[i].listing.ID > entries[j].listing.ID
+	})
+
+	out := make([]*models.RecipeListing, len(entries))
+	for i := range entries {
+		out[i] = &entries[i].listing
+	}
+	return out
+}
+
+// applyPaging windows an already-sorted slice. A negative offset is clamped to
+// zero and a limit of zero or less means unlimited, matching the postgres
+// backend.
+func applyPaging(listings []*models.RecipeListing, offset, limit int) []*models.RecipeListing {
+	offset = max(offset, 0)
+	if offset >= len(listings) {
+		return nil
+	}
+	listings = listings[offset:]
+	if limit > 0 && len(listings) > limit {
+		listings = listings[:limit]
+	}
+	return listings
+}
+
+// distinctRecipeValues returns the sorted, de-duplicated non-empty values of one
+// recipe field across a user's recipes.
+func (tx *localTransaction) distinctRecipeValues(userID int64, value func(models.Recipe) string) []string {
+	seen := make(map[string]bool)
+	for _, r := range tx.data.Recipes {
+		if r.UserID != userID {
+			continue
+		}
+		if v := value(r); v != "" {
+			seen[v] = true
+		}
+	}
+	out := make([]string, 0, len(seen))
+	for v := range seen {
+		out = append(out, v)
+	}
+	sort.Strings(out)
+	return out
 }

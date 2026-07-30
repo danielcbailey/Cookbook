@@ -76,10 +76,14 @@ type RecipeNutrition struct {
 }
 
 type RecipeListing struct {
-	ID       int64
-	UserID   int64
-	Title    string
-	ImageURL string
+	ID       int64       `json:"id"`
+	UserID   int64       `json:"user_id"`
+	Title    string      `json:"title"`
+	ImageURL string      `json:"image_url"`
+	Servings int         `json:"servings"`
+	Calories int         `json:"calories"`
+	Time     RecipeTime  `json:"time"`
+	Tags     []RecipeTag `json:"tags"`
 }
 
 type RecipeTimeUnit string

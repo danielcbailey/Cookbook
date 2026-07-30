@@ -2,13 +2,22 @@ package cache
 
 import (
 	"context"
+	"errors"
 	"time"
 )
 
+// ErrNotFound is returned by backends when the requested key is absent or
+// expired. Every backend's ErrIsNotFound recognizes it, so callers holding only
+// a Cache should still prefer that method over errors.Is.
+var ErrNotFound = errors.New("not found")
+
 type Cache interface {
+	// Get reads a value from the cache. A missing key yields an error
+	// satisfying ErrIsNotFound.
 	Get(ctx context.Context, key string) (string, error)
 
-	// GetInterface reads an object from the cache. Ptr should be a pointer to a json-serializable struct
+	// GetInterface reads an object from the cache. Ptr should be a pointer to a json-serializable struct.
+	// A missing key yields an error satisfying ErrIsNotFound.
 	GetInterface(ctx context.Context, key string, ptr any) error
 
 	// Set stores the value in the cache. An expiry of zero is indefinite.

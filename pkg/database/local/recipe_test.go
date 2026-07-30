@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"math/rand/v2"
+	"slices"
 	"testing"
 
 	"github.com/danielcbailey/Cookbook/core/models"
@@ -233,26 +234,115 @@ func TestUpdateRecipe_PersistsTotalTimeAndNutrition(t *testing.T) {
 	}
 }
 
-func TestListRecipesByUserID_KeepsTotalTimeOmitsNutrition(t *testing.T) {
+func TestListRecipesByUserID_ListingShape(t *testing.T) {
 	tx, u := setupRecipeTest(t)
 
 	r := testRecipe(u.ID)
+	r.ImageURL = "recipes/1/img.jpg"
 	r.TotalTime = testTotalTime()
 	r.Nutrition = testNutrition()
 	tx.CreateRecipe(&r)
 
-	list, err := tx.ListRecipesByUserID(u.ID)
+	list, err := tx.ListRecipesByUserID(u.ID, 0, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(list) != 1 {
 		t.Fatalf("recipes: got %d, want 1", len(list))
 	}
-	if list[0].TotalTime != testTotalTime() {
-		t.Fatalf("total time: got %+v, want %+v", list[0].TotalTime, testTotalTime())
+
+	got := list[0]
+	if got.ID != r.ID || got.UserID != u.ID {
+		t.Fatalf("identity: got ID %d UserID %d, want %d/%d", got.ID, got.UserID, r.ID, u.ID)
 	}
-	if list[0].Nutrition != (models.RecipeNutrition{}) {
-		t.Fatalf("nutrition should be omitted from listings, got %+v", list[0].Nutrition)
+	if got.Title != "Pasta" {
+		t.Fatalf("title: got %q, want %q", got.Title, "Pasta")
+	}
+	if got.ImageURL != "recipes/1/img.jpg" {
+		t.Fatalf("image url: got %q", got.ImageURL)
+	}
+	if got.Servings != 4 {
+		t.Fatalf("servings: got %d, want 4", got.Servings)
+	}
+	if got.Calories != testNutrition().Calories {
+		t.Fatalf("calories: got %d, want %d", got.Calories, testNutrition().Calories)
+	}
+	if got.Time != testTotalTime() {
+		t.Fatalf("time: got %+v, want %+v", got.Time, testTotalTime())
+	}
+	if len(got.Tags) != 2 {
+		t.Fatalf("tags: got %d, want 2", len(got.Tags))
+	}
+}
+
+func TestListRecipesByUserID_ReturnsCopiedTags(t *testing.T) {
+	tx, u := setupRecipeTest(t)
+
+	r := testRecipe(u.ID)
+	tx.CreateRecipe(&r)
+
+	list, _ := tx.ListRecipesByUserID(u.ID, 0, 0)
+	list[0].Tags[0].Name = "mutated"
+
+	list2, _ := tx.ListRecipesByUserID(u.ID, 0, 0)
+	if list2[0].Tags[0].Name == "mutated" {
+		t.Fatal("modifying returned tags should not affect store")
+	}
+}
+
+func TestListRecipesByUserID_Paging(t *testing.T) {
+	tx, u := setupRecipeTest(t)
+
+	// Created in one transaction, so these share a CreatedAt second and the
+	// ordering falls through to the ID tie-break.
+	const total = 5
+	ids := make([]int64, total)
+	for i := range total {
+		r := testRecipe(u.ID)
+		tx.CreateRecipe(&r)
+		ids[i] = r.ID
+	}
+
+	all, err := tx.ListRecipesByUserID(u.ID, 0, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(all) != total {
+		t.Fatalf("limit 0 should be unlimited: got %d, want %d", len(all), total)
+	}
+	// Newest first, so the highest ID leads.
+	if all[0].ID != ids[total-1] {
+		t.Fatalf("expected newest recipe %d first, got %d", ids[total-1], all[0].ID)
+	}
+	if all[total-1].ID != ids[0] {
+		t.Fatalf("expected oldest recipe %d last, got %d", ids[0], all[total-1].ID)
+	}
+
+	// Pages must be disjoint and cover the whole set in order.
+	var paged []int64
+	for offset := 0; offset < total; offset += 2 {
+		page, err := tx.ListRecipesByUserID(u.ID, offset, 2)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, l := range page {
+			paged = append(paged, l.ID)
+		}
+	}
+	if len(paged) != total {
+		t.Fatalf("paging covered %d recipes, want %d", len(paged), total)
+	}
+	for i, id := range paged {
+		if id != all[i].ID {
+			t.Fatalf("page %d: got recipe %d, want %d", i, id, all[i].ID)
+		}
+	}
+
+	if page, _ := tx.ListRecipesByUserID(u.ID, total, 2); len(page) != 0 {
+		t.Fatalf("offset past the end should be empty, got %d", len(page))
+	}
+	if page, _ := tx.ListRecipesByUserID(u.ID, -5, 2); len(page) != 2 || page[0].ID != all[0].ID {
+		t.Fatal("negative offset should be clamped to 0")
 	}
 }
 
@@ -271,7 +361,7 @@ func TestDeleteRecipe(t *testing.T) {
 	}
 }
 
-func TestListRecipesByUserID_OrderAndShallowCopy(t *testing.T) {
+func TestListRecipesByUserID_Order(t *testing.T) {
 	tx, u := setupRecipeTest(t)
 
 	r1 := testRecipe(u.ID)
@@ -282,10 +372,7 @@ func TestListRecipesByUserID_OrderAndShallowCopy(t *testing.T) {
 	r2.Title = "Second"
 	tx.CreateRecipe(&r2)
 
-	step := models.RecipeStep{RecipeID: r1.ID, Index: 0, Title: "S"}
-	tx.CreateOrUpdateRecipeStep(&step)
-
-	list, err := tx.ListRecipesByUserID(u.ID)
+	list, err := tx.ListRecipesByUserID(u.ID, 0, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -294,15 +381,6 @@ func TestListRecipesByUserID_OrderAndShallowCopy(t *testing.T) {
 	}
 	if list[0].Title != "Second" {
 		t.Fatal("should be ordered by CreatedAt DESC (newest first)")
-	}
-	if list[0].Steps != nil {
-		t.Fatal("list should not include steps")
-	}
-	if list[0].Ingredients != nil {
-		t.Fatal("list should not include ingredients")
-	}
-	if list[0].Embedding != nil {
-		t.Fatal("list should not include embedding")
 	}
 	if len(list[0].Tags) == 0 {
 		t.Fatal("list should include tags")
@@ -331,13 +409,13 @@ func TestListRecipesByUserID_FiltersByUser(t *testing.T) {
 	r2 := testRecipe(u2.ID)
 	tx.CreateRecipe(&r2)
 
-	list, _ := tx.ListRecipesByUserID(u1.ID)
+	list, _ := tx.ListRecipesByUserID(u1.ID, 0, 0)
 	if len(list) != 1 {
 		t.Fatalf("got %d, want 1 recipe for user 1", len(list))
 	}
 }
 
-func TestSearchRecipesBySemanticSimilarity(t *testing.T) {
+func TestListRecipesBySemanticSimilarity(t *testing.T) {
 	tx, u := setupRecipeTest(t)
 
 	close := models.Recipe{
@@ -361,7 +439,7 @@ func TestSearchRecipesBySemanticSimilarity(t *testing.T) {
 	tx.CreateRecipe(&noEmbed)
 
 	query := []float32{1, 0.1, 0}
-	results, err := tx.SearchRecipesBySemanticSimilarity(u.ID, query, 10)
+	results, err := tx.ListRecipesBySemanticSimilarity(u.ID, query, 10)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -373,7 +451,7 @@ func TestSearchRecipesBySemanticSimilarity(t *testing.T) {
 	}
 }
 
-func TestSearchRecipesBySemanticSimilarity_Limit(t *testing.T) {
+func TestListRecipesBySemanticSimilarity_Limit(t *testing.T) {
 	tx, u := setupRecipeTest(t)
 
 	for i := 0; i < 5; i++ {
@@ -385,9 +463,242 @@ func TestSearchRecipesBySemanticSimilarity_Limit(t *testing.T) {
 		tx.CreateRecipe(&r)
 	}
 
-	results, _ := tx.SearchRecipesBySemanticSimilarity(u.ID, []float32{1, 0, 0}, 3)
+	results, _ := tx.ListRecipesBySemanticSimilarity(u.ID, []float32{1, 0, 0}, 3)
 	if len(results) != 3 {
 		t.Fatalf("got %d, want 3", len(results))
+	}
+
+	unlimited, _ := tx.ListRecipesBySemanticSimilarity(u.ID, []float32{1, 0, 0}, 0)
+	if len(unlimited) != 5 {
+		t.Fatalf("limit 0 should be unlimited: got %d, want 5", len(unlimited))
+	}
+}
+
+// setupFilterTest creates two users, gives user 1 three recipes spanning two
+// categories/proteins/meals, and gives user 2 one recipe that shares user 1's
+// values so the scoping assertions are meaningful.
+func setupFilterTest(t *testing.T) (database.Transaction, models.User) {
+	t.Helper()
+	tx, u := setupRecipeTest(t)
+
+	mk := func(userID int64, title, category, protein, meal string) {
+		r := testRecipe(userID)
+		r.Title = title
+		r.Category = category
+		r.Protein = protein
+		r.SuggestedMeal = meal
+		if _, err := tx.CreateRecipe(&r); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	mk(u.ID, "Roast", "roasts and braises", "beef", "dinner")
+	mk(u.ID, "Stew", "soup and stew", "beef", "dinner")
+	mk(u.ID, "Cake", "cake", "", "dessert")
+
+	other := testUser()
+	other.Email = "other@test.com"
+	if _, err := tx.CreateUser(&other); err != nil {
+		t.Fatal(err)
+	}
+	mk(other.ID, "Other Roast", "roasts and braises", "beef", "dinner")
+
+	return tx, u
+}
+
+func TestListRecipesByCategory(t *testing.T) {
+	tx, u := setupFilterTest(t)
+
+	list, err := tx.ListRecipesByCategory(u.ID, "roasts and braises", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(list) != 1 {
+		t.Fatalf("got %d, want 1 (other users' recipes must be excluded)", len(list))
+	}
+	if list[0].Title != "Roast" {
+		t.Fatalf("title: got %q, want %q", list[0].Title, "Roast")
+	}
+
+	if none, _ := tx.ListRecipesByCategory(u.ID, "pizza and flatbread", 0); len(none) != 0 {
+		t.Fatalf("non-matching category: got %d, want 0", len(none))
+	}
+}
+
+func TestListRecipesByProtein(t *testing.T) {
+	tx, u := setupFilterTest(t)
+
+	list, err := tx.ListRecipesByProtein(u.ID, "beef", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(list) != 2 {
+		t.Fatalf("got %d, want 2", len(list))
+	}
+	// Newest first: Stew was created after Roast.
+	if list[0].Title != "Stew" {
+		t.Fatalf("expected newest first, got %q", list[0].Title)
+	}
+
+	limited, _ := tx.ListRecipesByProtein(u.ID, "beef", 1)
+	if len(limited) != 1 {
+		t.Fatalf("limit: got %d, want 1", len(limited))
+	}
+}
+
+func TestListRecipesByMeal(t *testing.T) {
+	tx, u := setupFilterTest(t)
+
+	list, err := tx.ListRecipesByMeal(u.ID, "dinner", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(list) != 2 {
+		t.Fatalf("got %d, want 2", len(list))
+	}
+
+	dessert, _ := tx.ListRecipesByMeal(u.ID, "dessert", 0)
+	if len(dessert) != 1 || dessert[0].Title != "Cake" {
+		t.Fatalf("dessert: got %+v", dessert)
+	}
+}
+
+func TestListRecipesByTitleSearch(t *testing.T) {
+	tx, u := setupFilterTest(t)
+
+	titles := func(list []*models.RecipeListing) []string {
+		out := make([]string, len(list))
+		for i, l := range list {
+			out[i] = l.Title
+		}
+		return out
+	}
+
+	cases := []struct {
+		name  string
+		query string
+		limit int
+		want  []string
+	}{
+		// The other user's "Other Roast" must never appear.
+		{"exact, lowercased", "roast", 0, []string{"Roast"}},
+		{"uppercased query", "ROAST", 0, []string{"Roast"}},
+		{"matches mid-title, not just prefixes", "ew", 0, []string{"Stew"}},
+		{"newest first", "a", 0, []string{"Cake", "Roast"}},
+		{"limit applies after ordering", "a", 1, []string{"Cake"}},
+		{"no match", "pizza", 0, nil},
+		{"empty query matches everything", "", 0, []string{"Cake", "Stew", "Roast"}},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := tx.ListRecipesByTitleSearch(u.ID, tc.query, tc.limit)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !slices.Equal(titles(got), tc.want) {
+				t.Fatalf("%q: got %v, want %v", tc.query, titles(got), tc.want)
+			}
+		})
+	}
+}
+
+func TestListRecipeCategories(t *testing.T) {
+	tx, u := setupFilterTest(t)
+
+	got, err := tx.ListRecipeCategories(u.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"cake", "roasts and braises", "soup and stew"}
+	if !slices.Equal(got, want) {
+		t.Fatalf("categories: got %v, want %v", got, want)
+	}
+}
+
+func TestListRecipeProteins_DedupesAndSkipsEmpty(t *testing.T) {
+	tx, u := setupFilterTest(t)
+
+	got, err := tx.ListRecipeProteins(u.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// "beef" appears on two recipes and the cake has no protein at all.
+	want := []string{"beef"}
+	if !slices.Equal(got, want) {
+		t.Fatalf("proteins: got %v, want %v", got, want)
+	}
+}
+
+func TestListRecipeMealtimes(t *testing.T) {
+	tx, u := setupFilterTest(t)
+
+	got, err := tx.ListRecipeMealtimes(u.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"dessert", "dinner"}
+	if !slices.Equal(got, want) {
+		t.Fatalf("mealtimes: got %v, want %v", got, want)
+	}
+}
+
+func TestListRecipeValues_EmptyForUnknownUser(t *testing.T) {
+	tx, _ := setupFilterTest(t)
+
+	for name, fn := range map[string]func(int64) ([]string, error){
+		"categories": tx.ListRecipeCategories,
+		"proteins":   tx.ListRecipeProteins,
+		"mealtimes":  tx.ListRecipeMealtimes,
+	} {
+		got, err := fn(99999)
+		if err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		if len(got) != 0 {
+			t.Fatalf("%s: got %v, want empty", name, got)
+		}
+	}
+}
+
+// Every listing path must populate Tags, not just ListRecipesByUserID.
+func TestListRecipes_AllPathsIncludeTags(t *testing.T) {
+	tx, u := setupRecipeTest(t)
+
+	r := testRecipe(u.ID) // has tags "italian" and "quick"
+	r.Category = "cake"
+	r.Protein = "beef"
+	r.SuggestedMeal = "dinner"
+	r.Embedding = []float32{1, 0, 0}
+	tx.CreateRecipe(&r)
+
+	paths := map[string]func() ([]*models.RecipeListing, error){
+		"ByUserID": func() ([]*models.RecipeListing, error) { return tx.ListRecipesByUserID(u.ID, 0, 0) },
+		"BySemanticSimilarity": func() ([]*models.RecipeListing, error) {
+			return tx.ListRecipesBySemanticSimilarity(u.ID, []float32{1, 0, 0}, 0)
+		},
+		"ByCategory":    func() ([]*models.RecipeListing, error) { return tx.ListRecipesByCategory(u.ID, "cake", 0) },
+		"ByProtein":     func() ([]*models.RecipeListing, error) { return tx.ListRecipesByProtein(u.ID, "beef", 0) },
+		"ByMeal":        func() ([]*models.RecipeListing, error) { return tx.ListRecipesByMeal(u.ID, "dinner", 0) },
+		"ByTitleSearch": func() ([]*models.RecipeListing, error) { return tx.ListRecipesByTitleSearch(u.ID, "past", 0) },
+	}
+
+	for name, list := range paths {
+		got, err := list()
+		if err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		if len(got) != 1 {
+			t.Fatalf("%s: got %d listings, want 1", name, len(got))
+		}
+		if len(got[0].Tags) != 2 {
+			t.Fatalf("%s: got %d tags, want 2", name, len(got[0].Tags))
+		}
+		for _, tag := range got[0].Tags {
+			if tag.ID == 0 || tag.Name == "" {
+				t.Fatalf("%s: tag not fully populated: %+v", name, tag)
+			}
+		}
 	}
 }
 
@@ -596,7 +907,7 @@ func randEmbedding(rng *rand.Rand, dims int) []float32 {
 	return v
 }
 
-func BenchmarkSearchRecipesBySemanticSimilarity_1000(b *testing.B) {
+func BenchmarkListRecipesBySemanticSimilarity_1000(b *testing.B) {
 	const numRecipes = 1000
 	const dims = 1536
 
@@ -639,7 +950,7 @@ func BenchmarkSearchRecipesBySemanticSimilarity_1000(b *testing.B) {
 		if err != nil {
 			b.Fatal(err)
 		}
-		results, err := tx.SearchRecipesBySemanticSimilarity(u.ID, query, 10)
+		results, err := tx.ListRecipesBySemanticSimilarity(u.ID, query, 10)
 		if err != nil {
 			b.Fatal(err)
 		}

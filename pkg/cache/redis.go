@@ -88,5 +88,5 @@ func (r *RedisCache) Add(ctx context.Context, key string, delta int64, expiry ti
 }
 
 func (_ *RedisCache) ErrIsNotFound(err error) bool {
-	return errors.Is(err, redis.Nil)
+	return errors.Is(err, redis.Nil) || errors.Is(err, ErrNotFound)
 }

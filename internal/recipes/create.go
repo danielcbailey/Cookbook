@@ -59,8 +59,21 @@ func SaveRecipe(ctx context.Context, providers config.Providers, recipe *models.
 		recipe.UserID = providers.User().ID
 	}
 
+	err = checkRecipeIngredients(recipe, existing)
+	if err != nil {
+		tx.Rollback()
+		return 0, err
+	}
+
 	// Updating ingredients with IDs
 	err = getOrCreateIngredients(ctx, providers, tx, recipe)
+	if err != nil {
+		tx.Rollback()
+		return 0, err
+	}
+
+	// Generating new embedding for recipe
+	err = updateRecipeEmbedding(ctx, providers, recipe, existing)
 	if err != nil {
 		tx.Rollback()
 		return 0, err
@@ -106,6 +119,90 @@ func SaveRecipe(ctx context.Context, providers config.Providers, recipe *models.
 	return recipe.ID, nil
 }
 
+func updateRecipeEmbedding(ctx context.Context, providers config.Providers, recipe, existing *models.Recipe) error {
+	if providers.Config().SemanticSearchEnabled && shouldGenerateNewEmbedding(recipe, existing) {
+		contentBuilder := strings.Builder{}
+		contentBuilder.WriteString(recipe.Title)
+		contentBuilder.WriteString(" Description: ")
+		contentBuilder.WriteString(recipe.Description)
+		contentBuilder.WriteString(" Tags: ")
+		for i, tag := range recipe.Tags {
+			if i > 0 {
+				contentBuilder.WriteString(", ")
+			}
+			contentBuilder.WriteString(tag.Name)
+		}
+
+		embedding, err := ai.ConvertToEmbedding(ctx, providers, contentBuilder.String())
+		if err != nil {
+			return err
+		}
+		recipe.Embedding = embedding
+	}
+
+	return nil
+}
+
+func checkRecipeIngredients(new, old *models.Recipe) error {
+	getIDSet := func(recipe *models.Recipe) map[int64]struct{} {
+		ret := make(map[int64]struct{})
+		for _, ingr := range recipe.Ingredients {
+			ret[ingr.ID] = struct{}{}
+		}
+		for _, step := range recipe.Steps {
+			for _, ingr := range step.Ingredients {
+				ret[ingr.ID] = struct{}{}
+			}
+		}
+
+		return ret
+	}
+
+	newSet := getIDSet(new)
+	if old == nil {
+		if _, ok := newSet[0]; !ok || len(newSet) != 1 {
+			return apicommon.NewUserFacingError("expected all zero IDs for new recipe's ingredients")
+		}
+		return nil
+	}
+
+	oldSet := getIDSet(old)
+	for id := range newSet {
+		if _, ok := oldSet[id]; !ok {
+			return apicommon.NewUserFacingError("invalid recipe ingredient ID: %d", id)
+		}
+	}
+
+	return nil
+}
+
+func shouldGenerateNewEmbedding(new, old *models.Recipe) bool {
+	if old == nil {
+		return true
+	}
+
+	if new.Title != old.Title {
+		return true
+	} else if new.Description != old.Description {
+		return true
+	} else if len(new.Tags) != len(old.Tags) {
+		return true
+	}
+
+	oldTags := make(map[string]struct{})
+	for _, tag := range old.Tags {
+		oldTags[tag.Name] = struct{}{}
+	}
+
+	for _, tag := range new.Tags {
+		if _, ok := oldTags[tag.Name]; !ok {
+			return true
+		}
+	}
+
+	return false
+}
+
 func updateRecipeSteps(tx database.Transaction, new, old *models.Recipe) error {
 	getIDSet := func(recipe *models.Recipe) map[int64]*models.RecipeStep {
 		ret := make(map[int64]*models.RecipeStep)
@@ -143,6 +240,15 @@ func updateRecipeSteps(tx database.Transaction, new, old *models.Recipe) error {
 
 	newSet := getIDSet(new)
 	oldSet := getIDSet(old)
+
+	for i, step := range newSet {
+		if step.ID == 0 {
+			continue
+		}
+		if _, ok := oldSet[step.ID]; !ok {
+			return apicommon.NewUserFacingError("invalid step ID %d at index %d", step.ID, i)
+		}
+	}
 
 	for oldStepID, oldStep := range oldSet {
 		if _, found := newSet[oldStepID]; found {
@@ -323,6 +429,15 @@ func getOrCreateIngredients(ctx context.Context, providers config.Providers, tx 
 	mapping := make(map[string]int64)
 
 	for _, ingredient := range recipe.Ingredients {
+		if !providers.Config().SemanticSearchEnabled {
+			// Just checks that ingredient has valid ID
+			_, err := tx.GetIngredientByID(providers.User().ID, ingredient.Ingredient.ID)
+			if errors.Is(err, database.ErrNotFound) {
+				return apicommon.NewUserFacingError("invalid ingredient ID: %d", ingredient.Ingredient.ID)
+			}
+			return fmt.Errorf("no semantic search recipe ingredients check not implemented")
+		}
+
 		embedding, err := ai.ConvertToEmbedding(ctx, providers, ingredient.Ingredient.Name)
 		if err != nil {
 			return fmt.Errorf("failed to get embedding of ingredient name: %w", err)
@@ -359,7 +474,11 @@ func getOrCreateIngredients(ctx context.Context, providers config.Providers, tx 
 
 	for i, step := range recipe.Steps {
 		for j, ingredient := range step.Ingredients {
-			recipe.Steps[i].Ingredients[j].Ingredient.ID = mapping[strings.ToLower(ingredient.Ingredient.Name)]
+			id, ok := mapping[strings.ToLower(ingredient.Ingredient.Name)]
+			if !ok {
+				return apicommon.NewUserFacingError("ingredient '%s' from step '%d' is not found in overall ingredients list", ingredient.Ingredient.Name, i+1)
+			}
+			recipe.Steps[i].Ingredients[j].Ingredient.ID = id
 		}
 	}
 

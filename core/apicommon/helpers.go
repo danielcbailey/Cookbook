@@ -2,7 +2,10 @@ package apicommon
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
+	"net/url"
+	"strconv"
 
 	"github.com/danielcbailey/Cookbook/core/config"
 )
@@ -46,4 +49,31 @@ func DecodeRequest[T any](w http.ResponseWriter, r *http.Request, maxSize int64)
 func WriteJSON(w http.ResponseWriter, payload any) error {
 	w.Header().Set("Content-Type", "application/json")
 	return json.NewEncoder(w).Encode(payload)
+}
+
+func ParseIntParam(w http.ResponseWriter, values url.Values, key string) (int, bool) {
+	str := values.Get(key)
+	if str == "" {
+		return 0, true
+	}
+
+	i, err := strconv.Atoi(str)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("invalid '%s' parameter: %s", key, err.Error()), http.StatusBadRequest)
+		return 0, false
+	}
+
+	return i, true
+}
+
+func ParsePositiveIntParam(w http.ResponseWriter, values url.Values, key string) (int, bool) {
+	i, ok := ParseIntParam(w, values, key)
+	if !ok {
+		return 0, false
+	} else if i < 0 {
+		http.Error(w, fmt.Sprintf("invalid '%s' parameter: value cannot be negative", key), http.StatusBadRequest)
+		return 0, false
+	}
+
+	return i, true
 }

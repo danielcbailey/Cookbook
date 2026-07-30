@@ -27,8 +27,19 @@ type Transaction interface {
 	UpdateUserUsage(userID int64, photoStorageDelta int, recipeExtractionDelta int) error
 
 	// Recipes
-	ListRecipesByUserID(userID int64) ([]*models.Recipe, error)
-	SearchRecipesBySemanticSimilarity(userID int64, embedding []float32, limit int) ([]*models.Recipe, error)
+	ListRecipesByUserID(userID int64, offset, limit int) ([]*models.RecipeListing, error)
+	ListRecipesBySemanticSimilarity(userID int64, embedding []float32, limit int) ([]*models.RecipeListing, error)
+	ListRecipesByCategory(userID int64, category string, limit int) ([]*models.RecipeListing, error)
+	ListRecipesByProtein(userID int64, protein string, limit int) ([]*models.RecipeListing, error)
+	ListRecipesByMeal(userID int64, meal string, limit int) ([]*models.RecipeListing, error)
+	// ListRecipesByTitleSearch returns the user's recipes whose title contains
+	// query, matched case-insensitively, newest first. An empty query matches
+	// every recipe.
+	ListRecipesByTitleSearch(userID int64, query string, limit int) ([]*models.RecipeListing, error)
+	ListRecipeCategories(userID int64) ([]string, error)
+	ListRecipeProteins(userID int64) ([]string, error)
+	ListRecipeMealtimes(userID int64) ([]string, error)
+
 	GetRecipeByID(recipeID int64) (*models.Recipe, error)
 	// CreateRecipe stores the recipe and returns its newly assigned ID.
 	CreateRecipe(recipe *models.Recipe) (int64, error)
@@ -43,6 +54,7 @@ type Transaction interface {
 	SearchIngredientsBySemanticSimilarity(userID int64, embedding []float32, limit int) ([]*models.Ingredient, error)
 	GetIngredientCategories(userID int64) ([]string, error)
 	GetIngredientsByCategory(userID int64, category string) ([]*models.Ingredient, error)
+	GetIngredientByID(userID int64, ID int64) (*models.Ingredient, error)
 	// CreateIngredient stores the ingredient and returns its newly assigned ID.
 	CreateIngredient(ingredient *models.Ingredient) (int64, error)
 	UpdateIngredient(ingredient *models.Ingredient) error

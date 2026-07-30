@@ -168,7 +168,7 @@ func checkUserImportLimit(user *models.User) bool {
 }
 
 func handleRecipeSave(w http.ResponseWriter, r *http.Request) {
-	if !apicommon.ExpectedMethod(w, r, "recipe web import", http.MethodPost) {
+	if !apicommon.ExpectedMethod(w, r, "recipe save", http.MethodPost) {
 		return
 	}
 
