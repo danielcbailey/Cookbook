@@ -59,9 +59,9 @@ func handleRecipeWebImport(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		p.Log().Error("failed to create DB transaction", slog.Any("error", err))
 		http.Error(w, "internal server error", http.StatusInternalServerError)
-		tx.Rollback()
 		return
 	}
+	defer tx.Rollback()
 
 	err = tx.UpdateUserUsage(p.User().ID, 0, 1)
 	if err != nil {
@@ -140,9 +140,9 @@ func handleRecipePhotoImport(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		p.Log().Error("failed to create DB transaction", slog.Any("error", err))
 		http.Error(w, "internal server error", http.StatusInternalServerError)
-		tx.Rollback()
 		return
 	}
+	defer tx.Rollback()
 
 	err = tx.UpdateUserUsage(p.User().ID, 0, 1)
 	if err != nil {

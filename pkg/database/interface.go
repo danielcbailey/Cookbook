@@ -9,10 +9,20 @@ import (
 
 var ErrNotFound = errors.New("not found")
 
+// ErrTxClosed is returned by Commit and Rollback when the transaction has
+// already been finished.
+var ErrTxClosed = errors.New("transaction already closed")
+
 type Database interface {
+	// NewTransaction begins a transaction. It holds a resource until finished,
+	// so every path out of the caller must Commit or Rollback it.
 	NewTransaction(ctx context.Context) (Transaction, error)
 }
 
+// Transaction is not safe for concurrent use. Commit and Rollback are
+// idempotent: whichever runs first releases the underlying resource, and later
+// calls are no-ops returning ErrTxClosed. A deferred Rollback with its error
+// ignored is therefore always safe, even alongside an explicit Commit.
 type Transaction interface {
 	Commit() error
 	Rollback() error
@@ -24,7 +34,7 @@ type Transaction interface {
 	CreateUser(user *models.User) (int64, error)
 	UpdateUser(user *models.User) error
 	DeleteUser(userID int64) error
-	UpdateUserUsage(userID int64, photoStorageDelta int, recipeExtractionDelta int) error
+	UpdateUserUsage(userID int64, photoStorageDeltaBytes int64, recipeExtractionDelta int) error
 
 	// Recipes
 	ListRecipesByUserID(userID int64, offset, limit int) ([]*models.RecipeListing, error)
@@ -32,6 +42,7 @@ type Transaction interface {
 	ListRecipesByCategory(userID int64, category string, limit int) ([]*models.RecipeListing, error)
 	ListRecipesByProtein(userID int64, protein string, limit int) ([]*models.RecipeListing, error)
 	ListRecipesByMeal(userID int64, meal string, limit int) ([]*models.RecipeListing, error)
+	ListRecipesByTag(userID int64, tag string, limit int) ([]*models.RecipeListing, error)
 	// ListRecipesByTitleSearch returns the user's recipes whose title contains
 	// query, matched case-insensitively, newest first. An empty query matches
 	// every recipe.
@@ -39,6 +50,10 @@ type Transaction interface {
 	ListRecipeCategories(userID int64) ([]string, error)
 	ListRecipeProteins(userID int64) ([]string, error)
 	ListRecipeMealtimes(userID int64) ([]string, error)
+	// ListRecipeTags returns the names of every tag the user owns, sorted. Tag
+	// rows outlive the associations that referenced them, so a name here may
+	// currently match no recipes.
+	ListRecipeTags(userID int64) ([]string, error)
 
 	GetRecipeByID(recipeID int64) (*models.Recipe, error)
 	// CreateRecipe stores the recipe and returns its newly assigned ID.
@@ -52,6 +67,9 @@ type Transaction interface {
 
 	// Ingredients
 	SearchIngredientsBySemanticSimilarity(userID int64, embedding []float32, limit int) ([]*models.Ingredient, error)
+	// ListIngredients returns the ingredients visible to the user — their own and
+	// the global ones — sorted by name. A limit of zero or less means unlimited.
+	ListIngredients(userID int64, offset, limit int) ([]*models.Ingredient, error)
 	GetIngredientCategories(userID int64) ([]string, error)
 	GetIngredientsByCategory(userID int64, category string) ([]*models.Ingredient, error)
 	GetIngredientByID(userID int64, ID int64) (*models.Ingredient, error)

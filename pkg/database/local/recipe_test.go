@@ -643,6 +643,44 @@ func TestListRecipeMealtimes(t *testing.T) {
 	}
 }
 
+func TestListRecipeTags(t *testing.T) {
+	tx, u := setupFilterTest(t)
+
+	// Every recipe from testRecipe carries the same two tags, so this also
+	// covers de-duplication across a user's recipes. The second user's
+	// identically named tags are separate rows and must not leak in.
+	got, err := tx.ListRecipeTags(u.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"italian", "quick"}
+	if !slices.Equal(got, want) {
+		t.Fatalf("tags: got %v, want %v", got, want)
+	}
+}
+
+func TestListRecipesByTag(t *testing.T) {
+	tx, u := setupFilterTest(t)
+
+	got, err := tx.ListRecipesByTag(u.ID, "italian", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// All three of the user's recipes are tagged, but the other user's is not
+	// visible even though it carries a tag of the same name.
+	if len(got) != 3 {
+		t.Fatalf("got %d listings, want 3", len(got))
+	}
+
+	none, err := tx.ListRecipesByTag(u.ID, "nonexistent", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(none) != 0 {
+		t.Fatalf("unknown tag: got %d listings, want 0", len(none))
+	}
+}
+
 func TestListRecipeValues_EmptyForUnknownUser(t *testing.T) {
 	tx, _ := setupFilterTest(t)
 
@@ -650,6 +688,7 @@ func TestListRecipeValues_EmptyForUnknownUser(t *testing.T) {
 		"categories": tx.ListRecipeCategories,
 		"proteins":   tx.ListRecipeProteins,
 		"mealtimes":  tx.ListRecipeMealtimes,
+		"tags":       tx.ListRecipeTags,
 	} {
 		got, err := fn(99999)
 		if err != nil {
@@ -680,6 +719,7 @@ func TestListRecipes_AllPathsIncludeTags(t *testing.T) {
 		"ByCategory":    func() ([]*models.RecipeListing, error) { return tx.ListRecipesByCategory(u.ID, "cake", 0) },
 		"ByProtein":     func() ([]*models.RecipeListing, error) { return tx.ListRecipesByProtein(u.ID, "beef", 0) },
 		"ByMeal":        func() ([]*models.RecipeListing, error) { return tx.ListRecipesByMeal(u.ID, "dinner", 0) },
+		"ByTag":         func() ([]*models.RecipeListing, error) { return tx.ListRecipesByTag(u.ID, "italian", 0) },
 		"ByTitleSearch": func() ([]*models.RecipeListing, error) { return tx.ListRecipesByTitleSearch(u.ID, "past", 0) },
 	}
 

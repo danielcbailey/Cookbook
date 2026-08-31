@@ -81,15 +81,28 @@ func (s *localStore) GetFile(_ context.Context, path string) ([]byte, error) {
 	return data, nil
 }
 
-func (s *localStore) DeleteFile(_ context.Context, path string) error {
+func (s *localStore) DeleteFile(_ context.Context, path string) (int64, error) {
 	dst, err := s.resolve(path)
 	if err != nil {
-		return err
+		return 0, err
 	}
-	if err := os.Remove(dst); err != nil && !errors.Is(err, os.ErrNotExist) {
-		return err
+
+	// Size has to be read before the unlink, and a missing file just means
+	// there is nothing to report.
+	var size int64
+	if info, err := os.Stat(dst); err == nil {
+		size = info.Size()
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return 0, err
 	}
-	return nil
+
+	if err := os.Remove(dst); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return 0, nil
+		}
+		return 0, err
+	}
+	return size, nil
 }
 
 func (_ *localStore) GetPresignedURL(_ context.Context, _ string, _ time.Duration) (string, error) {

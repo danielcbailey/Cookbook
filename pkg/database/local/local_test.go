@@ -1,9 +1,11 @@
 package local_test
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/danielcbailey/Cookbook/core/models"
+	"github.com/danielcbailey/Cookbook/pkg/database"
 	"github.com/danielcbailey/Cookbook/pkg/database/local"
 )
 
@@ -130,5 +132,34 @@ func TestDoubleRollbackErrors(t *testing.T) {
 	}
 	if err := tx.Rollback(); err == nil {
 		t.Fatal("expected error on double rollback")
+	}
+}
+
+// TestDeferredRollbackAfterCommit covers the `defer tx.Rollback()` pattern the
+// callers rely on: the deferred call must not release the transaction's
+// resource a second time, or the next transaction would never be able to start.
+func TestDeferredRollbackAfterCommit(t *testing.T) {
+	db, err := local.NewLocal(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	tx, err := db.NewTransaction(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+	if err := tx.Rollback(); !errors.Is(err, database.ErrTxClosed) {
+		t.Fatalf("expected ErrTxClosed on rollback after commit, got %v", err)
+	}
+
+	tx2, err := db.NewTransaction(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := tx2.Commit(); err != nil {
+		t.Fatal(err)
 	}
 }

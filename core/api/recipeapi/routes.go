@@ -17,10 +17,14 @@ func Routes() http.Handler {
 	mux.Handle("/api/v1/recipe/listbycategory", apicommon.AuthRequired(http.HandlerFunc(handleListRecipesByCategory)))
 	mux.Handle("/api/v1/recipe/listbyprotein", apicommon.AuthRequired(http.HandlerFunc(handleListRecipesByProtein)))
 	mux.Handle("/api/v1/recipe/listbymeal", apicommon.AuthRequired(http.HandlerFunc(handleListRecipesByMeal)))
+	mux.Handle("/api/v1/recipe/listbytag", apicommon.AuthRequired(http.HandlerFunc(handleListRecipesByTag)))
 	mux.Handle("/api/v1/recipe/search", apicommon.AuthRequired(http.HandlerFunc(handleListRecipesSearch)))
 
 	mux.Handle("/api/v1/recipe/categories", apicommon.AuthRequired(http.HandlerFunc(handleListCategories)))
 	mux.Handle("/api/v1/recipe/proteins", apicommon.AuthRequired(http.HandlerFunc(handleListProteins)))
 	mux.Handle("/api/v1/recipe/mealtimes", apicommon.AuthRequired(http.HandlerFunc(handleListMealtimes)))
+	mux.Handle("/api/v1/recipe/tags", apicommon.AuthRequired(http.HandlerFunc(handleListTags)))
+
+	mux.Handle("/api/v1/recipe/get/{id}", apicommon.AuthRequired(http.HandlerFunc(handleGetRecipe)))
 	return mux
 }

@@ -64,7 +64,7 @@ func (tx *localTransaction) DeleteUser(userID int64) error {
 	return nil
 }
 
-func (tx *localTransaction) UpdateUserUsage(userID int64, photoStorageDelta int, recipeExtractionDelta int) error {
+func (tx *localTransaction) UpdateUserUsage(userID int64, photoStorageDeltaBytes int64, recipeExtractionDelta int) error {
 	u, ok := tx.data.Users[userID]
 	if !ok {
 		return fmt.Errorf("user %d: %w", userID, database.ErrNotFound)
@@ -76,7 +76,7 @@ func (tx *localTransaction) UpdateUserUsage(userID int64, photoStorageDelta int,
 		u.LastUsageReset = now
 	}
 
-	u.CurrentPhotoStorageMB += photoStorageDelta
+	u.CurrentPhotoStorageBytes += photoStorageDeltaBytes
 	u.CurrentMonthlyRecipeExtraction += recipeExtractionDelta
 	u.UpdatedAt = now
 	tx.data.Users[userID] = u

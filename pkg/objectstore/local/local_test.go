@@ -93,7 +93,7 @@ func TestDeleteRemovesFile(t *testing.T) {
 	if err := store.StoreFile(t.Context(), "greeting.txt", []byte("hello")); err != nil {
 		t.Fatal(err)
 	}
-	if err := store.DeleteFile(t.Context(), "greeting.txt"); err != nil {
+	if _, err := store.DeleteFile(t.Context(), "greeting.txt"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -106,7 +106,7 @@ func TestDeleteRemovesFile(t *testing.T) {
 func TestDeleteMissingIsNotAnError(t *testing.T) {
 	store, _ := newStore(t)
 
-	if err := store.DeleteFile(t.Context(), "missing.txt"); err != nil {
+	if _, err := store.DeleteFile(t.Context(), "missing.txt"); err != nil {
 		t.Fatalf("delete of missing object: %v", err)
 	}
 }
@@ -128,7 +128,7 @@ func TestPathTraversalRejected(t *testing.T) {
 		if _, err := store.GetFile(t.Context(), path); err == nil {
 			t.Fatalf("GetFile(%q): expected error", path)
 		}
-		if err := store.DeleteFile(t.Context(), path); err == nil {
+		if _, err := store.DeleteFile(t.Context(), path); err == nil {
 			t.Fatalf("DeleteFile(%q): expected error", path)
 		}
 	}

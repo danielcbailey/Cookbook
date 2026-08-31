@@ -38,6 +38,7 @@ func SaveRecipe(ctx context.Context, providers config.Providers, recipe *models.
 	if err != nil {
 		return 0, err
 	}
+	defer tx.Rollback()
 
 	var existing *models.Recipe
 	if recipe.ID != 0 {
@@ -80,9 +81,10 @@ func SaveRecipe(ctx context.Context, providers config.Providers, recipe *models.
 	}
 
 	// Saving new images
-	err = saveImages(ctx, providers, recipe)
+	savedImages, err := saveImages(ctx, providers, recipe)
 	if err != nil {
 		tx.Rollback()
+		rollbackSavedImages(ctx, providers, savedImages)
 		return 0, err
 	}
 
@@ -91,6 +93,7 @@ func SaveRecipe(ctx context.Context, providers config.Providers, recipe *models.
 		id, err := tx.CreateRecipe(recipe)
 		if err != nil {
 			tx.Rollback()
+			rollbackSavedImages(ctx, providers, savedImages)
 			return 0, err
 		}
 		recipe.ID = id
@@ -98,6 +101,7 @@ func SaveRecipe(ctx context.Context, providers config.Providers, recipe *models.
 		err = tx.UpdateRecipe(recipe)
 		if err != nil {
 			tx.Rollback()
+			rollbackSavedImages(ctx, providers, savedImages)
 			return 0, err
 		}
 	}
@@ -105,11 +109,13 @@ func SaveRecipe(ctx context.Context, providers config.Providers, recipe *models.
 	err = updateRecipeSteps(tx, recipe, existing)
 	if err != nil {
 		tx.Rollback()
+		rollbackSavedImages(ctx, providers, savedImages)
 		return 0, err
 	}
 
 	err = tx.Commit()
 	if err != nil {
+		rollbackSavedImages(ctx, providers, savedImages)
 		return 0, fmt.Errorf("failed to commit recipe changes: %w", err)
 	}
 
@@ -264,28 +270,41 @@ func updateRecipeSteps(tx database.Transaction, new, old *models.Recipe) error {
 	return nil
 }
 
-func saveImages(ctx context.Context, providers config.Providers, recipe *models.Recipe) error {
+func saveImages(ctx context.Context, providers config.Providers, recipe *models.Recipe) ([]string, error) {
+	var savedImages []string
+
 	if needsSaving, err := imageNeedsSaved(recipe.ImageURL); needsSaving {
 		recipe.ImageURL, err = saveImage(ctx, providers, recipe.ImageURL, "title")
 		if err != nil {
-			return fmt.Errorf("failed to save image: %w", err)
+			return nil, fmt.Errorf("failed to save image: %w", err)
 		}
+		savedImages = append(savedImages, recipe.ImageURL)
 	} else if err != nil {
-		return err
+		return nil, err
 	}
 
 	for i, step := range recipe.Steps {
 		if needsSaving, err := imageNeedsSaved(step.ImageURL); needsSaving {
 			recipe.Steps[i].ImageURL, err = saveImage(ctx, providers, step.ImageURL, fmt.Sprintf("step %d", i+1))
 			if err != nil {
-				return fmt.Errorf("failed to save image: %w", err)
+				return savedImages, fmt.Errorf("failed to save image: %w", err)
 			}
+			savedImages = append(savedImages, recipe.Steps[i].ImageURL)
 		} else if err != nil {
-			return err
+			return savedImages, err
 		}
 	}
 
-	return nil
+	return savedImages, nil
+}
+
+func rollbackSavedImages(ctx context.Context, providers config.Providers, savedImages []string) {
+	for _, path := range savedImages {
+		err := deleteFile(ctx, providers, path)
+		if err != nil {
+			providers.Log().Error("failed to rollback saved image", slog.String("object_path", path), slog.Any("error", err))
+		}
+	}
 }
 
 func removeOldImages(ctx context.Context, providers config.Providers, old, new *models.Recipe) {
@@ -314,7 +333,7 @@ func removeOldImages(ctx context.Context, providers config.Providers, old, new *
 	for oldURL := range oldSet {
 		if _, found := newSet[oldURL]; !found {
 			// removed image
-			err := providers.ObjectStore().DeleteFile(ctx, oldURL)
+			err := deleteFile(ctx, providers, oldURL)
 			if err != nil {
 				// Removing old images is not critical from the user's perspective to updating/creating a recipe.
 				// Therefore, it should not block the action.
@@ -365,7 +384,7 @@ func saveImage(ctx context.Context, providers config.Providers, imageURL, imgCtx
 	}
 
 	objPath := fmt.Sprintf("recipes/%d/%s.jpg", providers.User().ID, uuid.Must(uuid.NewV7()))
-	if err := providers.ObjectStore().StoreFile(ctx, objPath, encoded.Bytes()); err != nil {
+	if err := storeFile(ctx, providers, objPath, encoded.Bytes()); err != nil {
 		return "", fmt.Errorf("failed to store image: %w", err)
 	}
 

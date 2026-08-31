@@ -67,6 +67,21 @@ func (tx *localTransaction) ListRecipesByMeal(userID int64, meal string, limit i
 	return applyPaging(out, 0, limit), nil
 }
 
+func (tx *localTransaction) ListRecipesByTag(userID int64, tag string, limit int) ([]*models.RecipeListing, error) {
+	out := tx.listingsWhere(func(r models.Recipe) bool {
+		if r.UserID != userID {
+			return false
+		}
+		for _, t := range r.Tags {
+			if t.Name == tag {
+				return true
+			}
+		}
+		return false
+	})
+	return applyPaging(out, 0, limit), nil
+}
+
 func (tx *localTransaction) ListRecipesByTitleSearch(userID int64, query string, limit int) ([]*models.RecipeListing, error) {
 	needle := strings.ToLower(query)
 	out := tx.listingsWhere(func(r models.Recipe) bool {
@@ -85,6 +100,20 @@ func (tx *localTransaction) ListRecipeProteins(userID int64) ([]string, error) {
 
 func (tx *localTransaction) ListRecipeMealtimes(userID int64) ([]string, error) {
 	return tx.distinctRecipeValues(userID, func(r models.Recipe) string { return r.SuggestedMeal }), nil
+}
+
+// ListRecipeTags reads the tag store rather than scanning recipes: reconcileTags
+// never prunes it, so a tag the user once applied stays listed after its last
+// recipe drops it. This matches the postgres backend, which reads recipe_tags.
+func (tx *localTransaction) ListRecipeTags(userID int64) ([]string, error) {
+	out := make([]string, 0, len(tx.data.Tags))
+	for _, t := range tx.data.Tags {
+		if t.UserID == userID {
+			out = append(out, t.Name)
+		}
+	}
+	sort.Strings(out)
+	return out, nil
 }
 
 func (tx *localTransaction) GetRecipeByID(recipeID int64) (*models.Recipe, error) {
@@ -379,16 +408,16 @@ func (tx *localTransaction) listingsWhere(keep func(models.Recipe) bool) []*mode
 // applyPaging windows an already-sorted slice. A negative offset is clamped to
 // zero and a limit of zero or less means unlimited, matching the postgres
 // backend.
-func applyPaging(listings []*models.RecipeListing, offset, limit int) []*models.RecipeListing {
+func applyPaging[T any](items []T, offset, limit int) []T {
 	offset = max(offset, 0)
-	if offset >= len(listings) {
+	if offset >= len(items) {
 		return nil
 	}
-	listings = listings[offset:]
-	if limit > 0 && len(listings) > limit {
-		listings = listings[:limit]
+	items = items[offset:]
+	if limit > 0 && len(items) > limit {
+		items = items[:limit]
 	}
-	return listings
+	return items
 }
 
 // distinctRecipeValues returns the sorted, de-duplicated non-empty values of one

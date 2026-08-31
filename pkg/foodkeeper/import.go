@@ -67,6 +67,8 @@ func Import(ctx context.Context, providers config.Providers, dataPath string) (i
 	if err != nil {
 		return 0, err
 	}
+	defer tx.Rollback()
+
 	if err := tx.DeleteAllFoodKeeperProducts(); err != nil {
 		_ = tx.Rollback()
 		return 0, err

@@ -36,6 +36,26 @@ func (tx *localTransaction) SearchIngredientsBySemanticSimilarity(userID int64, 
 	return out, nil
 }
 
+func (tx *localTransaction) ListIngredients(userID int64, offset, limit int) ([]*models.Ingredient, error) {
+	var out []*models.Ingredient
+	for _, ing := range tx.data.Ingredients {
+		if ing.UserID == userID || ing.UserID == 0 {
+			cp := copyIngredientModel(ing)
+			out = append(out, &cp)
+		}
+	}
+	// Map iteration is unordered, so sorting is what makes paging stable. Names
+	// are unique per owner but not across the global and user-owned sets, so
+	// break ties on ID to keep page boundaries identical to the postgres backend.
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Name != out[j].Name {
+			return out[i].Name < out[j].Name
+		}
+		return out[i].ID < out[j].ID
+	})
+	return applyPaging(out, offset, limit), nil
+}
+
 func (tx *localTransaction) GetIngredientCategories(userID int64) ([]string, error) {
 	seen := make(map[string]bool)
 	for _, ing := range tx.data.Ingredients {

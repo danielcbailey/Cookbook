@@ -14,6 +14,7 @@ func DeleteRecipe(ctx context.Context, providers config.Providers, recipeID int6
 	if err != nil {
 		return err
 	}
+	defer tx.Rollback()
 
 	existing, err := tx.GetRecipeByID(recipeID)
 	if err != nil {
@@ -46,7 +47,7 @@ func DeleteRecipe(ctx context.Context, providers config.Providers, recipeID int6
 
 	// Deleting images - failed deletions won't block user's action
 	if existing.ImageURL != "" {
-		err := providers.ObjectStore().DeleteFile(ctx, existing.ImageURL)
+		err := deleteFile(ctx, providers, existing.ImageURL)
 		if err != nil {
 			providers.Log().Error("failed to delete image", slog.String("object_path", existing.ImageURL), slog.Any("error", err))
 		}
@@ -57,7 +58,7 @@ func DeleteRecipe(ctx context.Context, providers config.Providers, recipeID int6
 			continue
 		}
 
-		err := providers.ObjectStore().DeleteFile(ctx, step.ImageURL)
+		err := deleteFile(ctx, providers, step.ImageURL)
 		if err != nil {
 			providers.Log().Error("failed to delete image", slog.String("object_path", existing.ImageURL), slog.Any("error", err))
 		}

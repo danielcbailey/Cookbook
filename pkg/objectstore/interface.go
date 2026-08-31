@@ -18,8 +18,9 @@ type ObjectStore interface {
 	StoreFile(ctx context.Context, path string, contents []byte) error
 	// GetFile returns the object's contents, or ErrNotFound if it does not exist.
 	GetFile(ctx context.Context, path string) ([]byte, error)
-	// DeleteFile removes the object. Deleting a nonexistent object is not an error.
-	DeleteFile(ctx context.Context, path string) error
+	// DeleteFile removes the object and returns the number of bytes deleted.
+	// Deleting a nonexistent object is not an error and reports 0 bytes.
+	DeleteFile(ctx context.Context, path string) (int64, error)
 
 	// GetPresignedURL returns a time-limited URL granting read access to path.
 	// Backends that cannot presign return ErrPresignUnsupported.

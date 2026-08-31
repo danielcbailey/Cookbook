@@ -7,6 +7,7 @@ import (
 	"github.com/danielcbailey/Cookbook/core/apicommon"
 	"github.com/danielcbailey/Cookbook/core/models"
 	"github.com/danielcbailey/Cookbook/internal/ai"
+	"github.com/danielcbailey/Cookbook/internal/recipes"
 	"github.com/danielcbailey/Cookbook/pkg/database"
 )
 
@@ -22,10 +23,18 @@ func handleListRecipeCommon(w http.ResponseWriter, r *http.Request, listFn func(
 		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
 	}
+	defer tx.Rollback() // Read only, so nothing to commit
 
 	listings, err := listFn(tx, p.User().ID)
 	if err != nil {
 		p.Log().Error("failed to query database", slog.Any("error", err))
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	err = recipes.RecipeListingPrepareImageURLs(r.Context(), p, listings)
+	if err != nil {
+		p.Log().Error("failed to prepare image URLs", slog.Any("error", err))
 		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
 	}
@@ -88,6 +97,19 @@ func handleListRecipesByMeal(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func handleListRecipesByTag(w http.ResponseWriter, r *http.Request) {
+	params := r.URL.Query()
+	tag := params.Get("tag")
+	limit, limOk := apicommon.ParsePositiveIntParam(w, params, "limit")
+	if !limOk {
+		return
+	}
+
+	handleListRecipeCommon(w, r, func(tx database.Transaction, userID int64) ([]*models.RecipeListing, error) {
+		return tx.ListRecipesByTag(userID, tag, limit)
+	})
+}
+
 func handleListRecipesSearch(w http.ResponseWriter, r *http.Request) {
 	params := r.URL.Query()
 	query := params.Get("query")
@@ -125,6 +147,7 @@ func handleListOptionsCommon(w http.ResponseWriter, r *http.Request, listFn func
 		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
 	}
+	defer tx.Rollback() // Read only, so nothing to commit
 
 	listings, err := listFn(tx, p.User().ID)
 	if err != nil {
@@ -154,5 +177,11 @@ func handleListProteins(w http.ResponseWriter, r *http.Request) {
 func handleListMealtimes(w http.ResponseWriter, r *http.Request) {
 	handleListOptionsCommon(w, r, func(tx database.Transaction, userID int64) ([]string, error) {
 		return tx.ListRecipeMealtimes(userID)
+	})
+}
+
+func handleListTags(w http.ResponseWriter, r *http.Request) {
+	handleListOptionsCommon(w, r, func(tx database.Transaction, userID int64) ([]string, error) {
+		return tx.ListRecipeTags(userID)
 	})
 }

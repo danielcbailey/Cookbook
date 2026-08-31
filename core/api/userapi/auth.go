@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"time"
 
 	"github.com/danielcbailey/Cookbook/core/apicommon"
 	"github.com/danielcbailey/Cookbook/pkg/database"
@@ -40,8 +41,9 @@ func handleUserLogin(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		p.Log().Error("failed to create new DB transaction", slog.Any("error", err))
 		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
 	}
-	defer tx.Commit() // Ready only, so no errors to trigger "rollback"
+	defer tx.Rollback() // Read only, so nothing to commit
 
 	user, err := tx.GetUserByPasswordHash(parsedReq.Email, getPasswordHash(parsedReq.Password))
 	if err != nil {
@@ -67,7 +69,13 @@ func handleUserLogin(w http.ResponseWriter, r *http.Request) {
 		Expiry: expiry.Unix(),
 	}
 
-	w.Header().Set("Set-Cookie", "session="+token)
+	http.SetCookie(w, &http.Cookie{
+		Name:     "session",
+		Value:    token,
+		Path:     "/",
+		MaxAge:   int(time.Until(expiry).Seconds()),
+		HttpOnly: true,
+	})
 
 	err = apicommon.WriteJSON(w, &responseObj)
 	if err != nil {

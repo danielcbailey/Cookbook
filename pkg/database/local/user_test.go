@@ -173,16 +173,16 @@ func TestUpdateUserUsage(t *testing.T) {
 	u := testUser()
 	tx.CreateUser(&u)
 
-	if err := tx.UpdateUserUsage(u.ID, 10, 3); err != nil {
+	if err := tx.UpdateUserUsage(u.ID, 300_000, 3); err != nil {
 		t.Fatal(err)
 	}
-	if err := tx.UpdateUserUsage(u.ID, 5, 1); err != nil {
+	if err := tx.UpdateUserUsage(u.ID, 45_000, 1); err != nil {
 		t.Fatal(err)
 	}
 
 	got, _ := tx.GetUserByID(u.ID)
-	if got.CurrentPhotoStorageMB != 15 {
-		t.Fatalf("photo storage: got %d, want 15", got.CurrentPhotoStorageMB)
+	if got.CurrentPhotoStorageBytes != 345_000 {
+		t.Fatalf("photo storage: got %d, want 345000", got.CurrentPhotoStorageBytes)
 	}
 	if got.CurrentMonthlyRecipeExtraction != 4 {
 		t.Fatalf("recipe extraction: got %d, want 4", got.CurrentMonthlyRecipeExtraction)

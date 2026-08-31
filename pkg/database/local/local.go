@@ -2,7 +2,6 @@ package local
 
 import (
 	"context"
-	"errors"
 	"sync"
 
 	"github.com/danielcbailey/Cookbook/pkg/database"
@@ -35,7 +34,7 @@ type localTransaction struct {
 
 func (tx *localTransaction) Commit() error {
 	if tx.finished {
-		return errors.New("transaction already finished")
+		return database.ErrTxClosed
 	}
 	tx.finished = true
 
@@ -50,7 +49,7 @@ func (tx *localTransaction) Commit() error {
 
 func (tx *localTransaction) Rollback() error {
 	if tx.finished {
-		return errors.New("transaction already finished")
+		return database.ErrTxClosed
 	}
 	tx.finished = true
 	tx.db.mu.Unlock()
