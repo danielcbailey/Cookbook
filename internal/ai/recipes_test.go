@@ -70,36 +70,6 @@ func TestParseRecipe_TotalTimeExact(t *testing.T) {
 	}
 }
 
-// Step times are consumed by parseStep, so they must not overwrite the
-// recipe-level total time.
-func TestParseRecipe_StepTimesDoNotOverwriteTotalTime(t *testing.T) {
-	r := parseRecipeString(t, `<recipe>
-		<time rangeStart="45" rangeEnd="50" unit="minute"/>
-		<steps>
-			<step title="Melt">
-				Melt the chocolate for <time exact="3" unit="minute"/>.
-			</step>
-			<step title="Bake">
-				Bake for <time rangeStart="30" rangeEnd="35" unit="minute"/>.
-			</step>
-		</steps>
-	</recipe>`)
-
-	wantTotal := models.RecipeTime{StartTime: 45, EndTime: 50, Unit: models.RecipeTimeUnitMinutes}
-	if r.TotalTime != wantTotal {
-		t.Fatalf("total time: got %+v, want %+v", r.TotalTime, wantTotal)
-	}
-	if len(r.Steps) != 2 {
-		t.Fatalf("steps: got %d, want 2", len(r.Steps))
-	}
-	if len(r.Steps[0].Times) != 1 || r.Steps[0].Times[0].StartTime != 3 {
-		t.Fatalf("step 0 times: got %+v", r.Steps[0].Times)
-	}
-	if len(r.Steps[1].Times) != 1 || r.Steps[1].Times[0].EndTime != 35 {
-		t.Fatalf("step 1 times: got %+v", r.Steps[1].Times)
-	}
-}
-
 func TestParseRecipe_OmittedNutritionAndTime(t *testing.T) {
 	r := parseRecipeString(t, `<recipe><title>Toast</title></recipe>`)
 

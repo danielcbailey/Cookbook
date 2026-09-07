@@ -1,9 +1,9 @@
 import { useEffect, useState, type CSSProperties } from 'react'
-import { Breadcrumbs, Button, ButtonGroup, toast } from '@heroui/react'
+import { Breadcrumbs, Button, ButtonGroup, Modal, Spinner, toast, Typography } from '@heroui/react'
 import { Header } from '../../header/header'
 import { useNavigate, useParams } from 'react-router-dom'
 import type { Recipe } from '../../apiTypes'
-import { getRecipe, RecipeAPIError } from '../../recipeAPI'
+import { deleteRecipe, getRecipe, RecipeAPIError } from '../../recipeAPI'
 import { RecipeOverview } from './overview'
 import { RecipeStepComponent } from './step'
 import {PencilToSquare, TrashBin} from '@gravity-ui/icons';
@@ -42,6 +42,7 @@ const toolsContainerStyle: CSSProperties = {
 export function RecipeViewPage({parent}: {parent: string}) {
     const {id} = useParams<{id: string}>();
     const [recipe, setRecipe] = useState<Recipe | null>(null);
+    const [deletePending, setDeletePending] = useState(false);
     const navigate = useNavigate();
 
     useEffect(() => {
@@ -77,7 +78,7 @@ export function RecipeViewPage({parent}: {parent: string}) {
                                 <PencilToSquare style={{width: 16, height: 16}}/>
                                 Edit
                             </Button>
-                            <Button>
+                            <Button onClick={() => setDeletePending(true)}>
                                 <ButtonGroup.Separator />
                                 <TrashBin style={{width: 16, height: 16}}/>
                                 Delete
@@ -86,6 +87,39 @@ export function RecipeViewPage({parent}: {parent: string}) {
                     </div>
                 </div>
             </div>
+            {recipe && <DeleteRecipeModal deletePending={deletePending} onCancel={() => setDeletePending(false)} recipeID={recipe.id}/>}
         </>
+    );
+}
+
+export function DeleteRecipeModal({deletePending, onCancel, recipeID}: {deletePending: boolean, onCancel: () => void, recipeID: number}) {
+    const [deleting, setDeleting] = useState(false);
+    const navigate = useNavigate();
+
+    const onDelete = () => {
+        setDeleting(true);
+        deleteRecipe(recipeID).then(() => {
+            navigate("/recipes");
+        }).catch((reason) => {
+            setDeleting(false);
+            onCancel();
+            toast.danger("Failed to Retrieve Recipe", {
+                description: reason.message,
+            });
+        });
+    }
+
+    return (
+        <Modal.Backdrop isOpen={deletePending} onOpenChange={(open) => !open && onCancel()}>
+            <Modal.Container>
+                <Modal.Dialog style={{display: 'flex', flexDirection: 'column', gap: 10, maxWidth: 300}}>
+                    <Typography type="h5" weight="semibold">
+                        Are you sure you want to delete this recipe?
+                    </Typography>
+                    {!deleting && <Button variant={'danger'} onClick={onDelete}>Yes, Delete</Button>}
+                    {deleting && <Spinner size="lg"/>}
+                </Modal.Dialog>
+            </Modal.Container>
+        </Modal.Backdrop>
     );
 }

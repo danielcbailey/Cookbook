@@ -3,6 +3,7 @@ package recipes
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"image"
@@ -60,12 +61,6 @@ func SaveRecipe(ctx context.Context, providers config.Providers, recipe *models.
 		recipe.UserID = providers.User().ID
 	}
 
-	err = checkRecipeIngredients(recipe, existing)
-	if err != nil {
-		tx.Rollback()
-		return 0, err
-	}
-
 	// Updating ingredients with IDs
 	err = getOrCreateIngredients(ctx, providers, tx, recipe)
 	if err != nil {
@@ -81,7 +76,7 @@ func SaveRecipe(ctx context.Context, providers config.Providers, recipe *models.
 	}
 
 	// Saving new images
-	savedImages, err := saveImages(ctx, providers, recipe)
+	savedImages, err := saveImages(ctx, providers, recipe, existing)
 	if err != nil {
 		tx.Rollback()
 		rollbackSavedImages(ctx, providers, savedImages)
@@ -144,39 +139,6 @@ func updateRecipeEmbedding(ctx context.Context, providers config.Providers, reci
 			return err
 		}
 		recipe.Embedding = embedding
-	}
-
-	return nil
-}
-
-func checkRecipeIngredients(new, old *models.Recipe) error {
-	getIDSet := func(recipe *models.Recipe) map[int64]struct{} {
-		ret := make(map[int64]struct{})
-		for _, ingr := range recipe.Ingredients {
-			ret[ingr.ID] = struct{}{}
-		}
-		for _, step := range recipe.Steps {
-			for _, ingr := range step.Ingredients {
-				ret[ingr.ID] = struct{}{}
-			}
-		}
-
-		return ret
-	}
-
-	newSet := getIDSet(new)
-	if old == nil {
-		if _, ok := newSet[0]; !ok || len(newSet) != 1 {
-			return apicommon.NewUserFacingError("expected all zero IDs for new recipe's ingredients")
-		}
-		return nil
-	}
-
-	oldSet := getIDSet(old)
-	for id := range newSet {
-		if _, ok := oldSet[id]; !ok {
-			return apicommon.NewUserFacingError("invalid recipe ingredient ID: %d", id)
-		}
 	}
 
 	return nil
@@ -270,10 +232,10 @@ func updateRecipeSteps(tx database.Transaction, new, old *models.Recipe) error {
 	return nil
 }
 
-func saveImages(ctx context.Context, providers config.Providers, recipe *models.Recipe) ([]string, error) {
+func saveImages(ctx context.Context, providers config.Providers, recipe *models.Recipe, existing *models.Recipe) ([]string, error) {
 	var savedImages []string
 
-	if needsSaving, err := imageNeedsSaved(recipe.ImageURL); needsSaving {
+	if needsSaving, err := imageNeedsSaved(providers, recipe.ImageURL); needsSaving {
 		recipe.ImageURL, err = saveImage(ctx, providers, recipe.ImageURL, "title")
 		if err != nil {
 			return nil, fmt.Errorf("failed to save image: %w", err)
@@ -281,10 +243,12 @@ func saveImages(ctx context.Context, providers config.Providers, recipe *models.
 		savedImages = append(savedImages, recipe.ImageURL)
 	} else if err != nil {
 		return nil, err
+	} else {
+		recipe.ImageURL = getOriginalCoverImageURI(existing)
 	}
 
 	for i, step := range recipe.Steps {
-		if needsSaving, err := imageNeedsSaved(step.ImageURL); needsSaving {
+		if needsSaving, err := imageNeedsSaved(providers, step.ImageURL); needsSaving {
 			recipe.Steps[i].ImageURL, err = saveImage(ctx, providers, step.ImageURL, fmt.Sprintf("step %d", i+1))
 			if err != nil {
 				return savedImages, fmt.Errorf("failed to save image: %w", err)
@@ -292,10 +256,33 @@ func saveImages(ctx context.Context, providers config.Providers, recipe *models.
 			savedImages = append(savedImages, recipe.Steps[i].ImageURL)
 		} else if err != nil {
 			return savedImages, err
+		} else {
+			recipe.Steps[i].ImageURL = getOriginalStepImageURI(existing, step.ID)
 		}
 	}
 
 	return savedImages, nil
+}
+
+func getOriginalCoverImageURI(existing *models.Recipe) string {
+	if existing != nil && existing.ImageURL != "" {
+		return existing.ImageURL
+	}
+	return ""
+}
+
+func getOriginalStepImageURI(existing *models.Recipe, stepID int64) string {
+	if existing == nil {
+		return ""
+	}
+
+	for _, s := range existing.Steps {
+		if s.ID == stepID {
+			return s.ImageURL
+		}
+	}
+
+	return ""
 }
 
 func rollbackSavedImages(ctx context.Context, providers config.Providers, savedImages []string) {
@@ -343,32 +330,32 @@ func removeOldImages(ctx context.Context, providers config.Providers, old, new *
 	}
 }
 
-func imageNeedsSaved(path string) (bool, error) {
-	parsedURL, err := url.Parse(path)
-	if err != nil {
-		return false, err
-	}
-
-	return parsedURL.IsAbs(), nil
+func imageNeedsSaved(providers config.Providers, path string) (bool, error) {
+	return strings.TrimSpace(path) != "" && !providers.ObjectStore().HostsURL(path), nil
 }
 
 // saveImage downloads a remote image, scales it down to at most
 // maxRecipeImagePixels, and stores it in the object store as a JPEG. It returns
 // the object path, which replaces the remote URL on the recipe.
 func saveImage(ctx context.Context, providers config.Providers, imageURL, imgCtx string) (string, error) {
-	contents, err := downloadImage(ctx, imageURL, imgCtx)
+	contents, isEmbedded, err := decodeEmbeddedImage(imageURL)
 	if err != nil {
-		return "", err
-	}
+		return "", fmt.Errorf("failed to decode embedded image: %w", err)
+	} else if !isEmbedded {
+		contents, err = downloadImage(ctx, imageURL, imgCtx)
+		if err != nil {
+			return "", err
+		}
 
-	// DecodeConfig first so an image that is small on the wire but enormous
-	// once decoded is rejected before it is allocated.
-	cfg, _, err := image.DecodeConfig(bytes.NewReader(contents))
-	if err != nil {
-		return "", fmt.Errorf("failed to decode image header: %w", err)
-	}
-	if cfg.Width*cfg.Height > maxRecipeDownloadImageArea {
-		return "", apicommon.NewUserFacingError("%s image exceeds the maximum size of %d megapixels, got %d", imgCtx, maxRecipeDownloadImageArea/1_000_000, cfg.Width*cfg.Height/1_000_000)
+		// DecodeConfig first so an image that is small on the wire but enormous
+		// once decoded is rejected before it is allocated.
+		cfg, _, err := image.DecodeConfig(bytes.NewReader(contents))
+		if err != nil {
+			return "", fmt.Errorf("failed to decode image header: %w", err)
+		}
+		if cfg.Width*cfg.Height > maxRecipeDownloadImageArea {
+			return "", apicommon.NewUserFacingError("%s image exceeds the maximum size of %d megapixels, got %d", imgCtx, maxRecipeDownloadImageArea/1_000_000, cfg.Width*cfg.Height/1_000_000)
+		}
 	}
 
 	img, _, err := image.Decode(bytes.NewReader(contents))
@@ -391,6 +378,28 @@ func saveImage(ctx context.Context, providers config.Providers, imageURL, imgCtx
 	return objPath, nil
 }
 
+func decodeEmbeddedImage(urlStr string) (data []byte, isEmbedded bool, err error) {
+	urlStr, err = url.QueryUnescape(urlStr)
+	if err != nil || !strings.HasPrefix(urlStr, "data:image/") {
+		return nil, false, nil
+	}
+
+	semiIndex := strings.Index(urlStr, ";")
+	commaIndex := strings.Index(urlStr, ",")
+	if semiIndex == -1 || commaIndex == -1 || semiIndex > commaIndex {
+		return nil, false, fmt.Errorf("invalid embedded image URL")
+	}
+
+	encoding := urlStr[semiIndex+1 : commaIndex]
+	if encoding != "base64" {
+		return nil, false, fmt.Errorf("unsupported embedded image encoding: %s", encoding)
+	}
+
+	data, err = base64.StdEncoding.DecodeString(urlStr[commaIndex+1:])
+	isEmbedded = true
+	return
+}
+
 func downloadImage(ctx context.Context, imageURL, imgCtx string) ([]byte, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, imageURL, nil)
 	if err != nil {
@@ -403,12 +412,12 @@ func downloadImage(ctx context.Context, imageURL, imgCtx string) ([]byte, error)
 
 	resp, err := client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get image contents: %w", err)
+		return nil, apicommon.NewUserFacingError("failed to get image contents: %v", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("image host responded with invalid status, expected OK. Got %s (%d)", resp.Status, resp.StatusCode)
+		return nil, apicommon.NewUserFacingError("image host responded with invalid status, expected OK. Got %s (%d)", resp.Status, resp.StatusCode)
 	}
 
 	limited := io.LimitReader(resp.Body, maxRecipeImageSize+1)
@@ -445,60 +454,38 @@ func scaleImage(img image.Image) image.Image {
 }
 
 func getOrCreateIngredients(ctx context.Context, providers config.Providers, tx database.Transaction, recipe *models.Recipe) error {
+	recipe.Ingredients = []models.RecipeIngredient{}
+	for _, step := range recipe.Steps {
+		ingredients := models.GetRecipeStepIngredients(step)
+		recipe.Ingredients = append(recipe.Ingredients, ingredients...)
+	}
+
 	mapping := make(map[string]int64)
 
 	for _, ingredient := range recipe.Ingredients {
-		if !providers.Config().SemanticSearchEnabled {
-			// Just checks that ingredient has valid ID
-			_, err := tx.GetIngredientByID(providers.User().ID, ingredient.Ingredient.ID)
-			if errors.Is(err, database.ErrNotFound) {
-				return apicommon.NewUserFacingError("invalid ingredient ID: %d", ingredient.Ingredient.ID)
-			}
-			return fmt.Errorf("no semantic search recipe ingredients check not implemented")
+		match, err := tx.GetIngredientByName(providers.User().ID, ingredient.Ingredient.Name)
+		if err != nil && !errors.Is(err, database.ErrNotFound) {
+			return err
 		}
 
-		embedding, err := ai.ConvertToEmbedding(ctx, providers, ingredient.Ingredient.Name)
-		if err != nil {
-			return fmt.Errorf("failed to get embedding of ingredient name: %w", err)
-		}
-
-		candidates, err := tx.SearchIngredientsBySemanticSimilarity(providers.User().ID, embedding, 10)
-		if err != nil {
-			return fmt.Errorf("failed to search existing ingredients: %w", err)
-		}
-
-		match, err := ai.AssociateIngredient(ctx, providers, candidates, recipe.Title, ingredient.Ingredient.Name)
-		if err != nil {
-			return fmt.Errorf("failed to associate ingredient: %w", err)
-		}
-
-		if match.ID == 0 {
+		var id int64
+		if match == nil || match.ID == 0 {
 			// Must create the ingredient
-			providers.Log().Debug("creating ingredient", slog.String("recipe_ingredient", ingredient.Ingredient.Name), slog.String("final_name", match.Name), slog.String("ingredient_category", match.Category))
+			providers.Log().Debug("creating ingredient", slog.String("recipe_ingredient", ingredient.Ingredient.Name))
 
-			match.ID, err = createIngredient(ctx, providers, tx, match.Name, match.Category)
+			id, err = createIngredient(ctx, providers, tx, ingredient.Ingredient.Name, "unknown")
 			if err != nil {
 				return fmt.Errorf("failed to create new ingredient: %w", err)
 			}
 		} else {
-			providers.Log().Debug("found matching ingredient", slog.String("recipe_ingredient", ingredient.Ingredient.Name), slog.String("match_name", match.Name), slog.String("match_category", match.Category))
+			id = match.ID
 		}
 
-		mapping[strings.ToLower(ingredient.Ingredient.Name)] = match.ID
+		mapping[strings.ToLower(ingredient.Ingredient.Name)] = id
 	}
 
 	for i, ingredient := range recipe.Ingredients {
 		recipe.Ingredients[i].Ingredient.ID = mapping[strings.ToLower(ingredient.Ingredient.Name)]
-	}
-
-	for i, step := range recipe.Steps {
-		for j, ingredient := range step.Ingredients {
-			id, ok := mapping[strings.ToLower(ingredient.Ingredient.Name)]
-			if !ok {
-				return apicommon.NewUserFacingError("ingredient '%s' from step '%d' is not found in overall ingredients list", ingredient.Ingredient.Name, i+1)
-			}
-			recipe.Steps[i].Ingredients[j].Ingredient.ID = id
-		}
 	}
 
 	return nil

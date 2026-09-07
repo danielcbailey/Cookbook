@@ -3,10 +3,12 @@ package recipes
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"image"
 	_ "image/jpeg"
 	_ "image/png"
 	"io"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
@@ -15,6 +17,7 @@ import (
 	"github.com/danielcbailey/Cookbook/core/config"
 	"github.com/danielcbailey/Cookbook/core/models"
 	"github.com/danielcbailey/Cookbook/internal/ai"
+	"github.com/danielcbailey/Cookbook/pkg/database"
 )
 
 const maxScrapeSize = 1 * apicommon.MiB
@@ -45,7 +48,13 @@ func ScrapeRecipeWeb(ctx context.Context, providers config.Providers, url string
 		return nil, apicommon.NewUserFacingError("website content is too long. Max size is %d KiB", maxScrapeSize/apicommon.KiB)
 	}
 
-	return ai.ExtractRecipeFromHTML(ctx, providers, string(body))
+	recipe, err := ai.ExtractRecipeFromHTML(ctx, providers, string(body))
+	if err != nil {
+		return nil, err
+	}
+
+	err = matchIngredients(ctx, providers, recipe)
+	return recipe, err
 }
 
 func ScrapeRecipePhotos(ctx context.Context, providers config.Providers, files []ai.FileAttachment) (*models.Recipe, error) {
@@ -68,5 +77,56 @@ func ScrapeRecipePhotos(ctx context.Context, providers config.Providers, files [
 		}
 	}
 
-	return ai.ExtractRecipeFromPhotos(ctx, providers, files)
+	recipe, err := ai.ExtractRecipeFromPhotos(ctx, providers, files)
+	if err != nil {
+		return nil, err
+	}
+
+	err = matchIngredients(ctx, providers, recipe)
+	return recipe, err
+}
+
+// matchIngredients attempts to match all ingredients to existing ingredients in the database
+func matchIngredients(ctx context.Context, providers config.Providers, recipe *models.Recipe) error {
+	if !providers.Config().SemanticSearchEnabled {
+		return nil
+	}
+
+	tx, err := providers.DB().NewTransaction(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	for i, step := range recipe.Steps {
+		ingredients := models.GetRecipeStepIngredients(step)
+		for _, ingr := range ingredients {
+			match, err := matchIngredientByName(ctx, providers, tx, ingr.Ingredient.Name, recipe.Title)
+			if err != nil {
+				return fmt.Errorf("failed to match ingredient %q: %w", ingr.Ingredient.Name, err)
+			} else if match != nil && match.ID != 0 {
+				providers.Log().Debug("found matching ingredient", slog.String("recipe_ingredient", ingr.Ingredient.Name), slog.String("match_name", match.Name), slog.String("match_category", match.Category))
+			}
+
+			matchedIngr := ingr
+			matchedIngr.Ingredient = *match
+			ingr.Replace(&recipe.Steps[i], matchedIngr)
+		}
+	}
+
+	return nil
+}
+
+func matchIngredientByName(ctx context.Context, providers config.Providers, tx database.Transaction, name, recipeTitle string) (*models.Ingredient, error) {
+	embedding, err := ai.ConvertToEmbedding(ctx, providers, name)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get embedding of ingredient name: %w", err)
+	}
+
+	candidates, err := tx.SearchIngredientsBySemanticSimilarity(providers.User().ID, embedding, 10)
+	if err != nil {
+		return nil, fmt.Errorf("failed to search existing ingredients: %w", err)
+	}
+
+	return ai.AssociateIngredient(ctx, providers, candidates, recipeTitle, name)
 }

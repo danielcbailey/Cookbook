@@ -1,12 +1,12 @@
 import { type CSSProperties } from "react";
 import type { Ingredient, RecipeIngredient, RecipeStep } from "../../apiTypes";
 import { CentererdImage } from "../../shared/recipeCard";
-import { ImageUpload } from "./overview";
 import { Button, Chip, IconPlus, Input, TextField } from "@heroui/react";
-import { RecipeStepDescriptionText } from "../recipe_view/stepBody";
-import { quantityLabel } from "../../shared/recipeHelpers";
+import { getStepIngredients, ingredientStepString, quantityLabel } from "../../shared/recipeHelpers";
 import { Clock, TrashBin } from "@gravity-ui/icons";
 import { IngredientPopup } from "./ingredient_popup";
+import { ImageUpload } from "../../shared/imageUpload";
+import { RecipeStepEditDescriptionText } from "./stepBody";
 
 
 const stepStyle: CSSProperties = {
@@ -34,25 +34,6 @@ const stepHeaderStyle: CSSProperties = {
     alignItems: 'flex-start',
 };
 
-function reassignIngredientIndices(step: RecipeStep) {
-    const bodyIngredients: RecipeIngredient[] = [];
-    const INGR_PLACEHOLDER = /\{\{ingr-(\d+)\}\}/g;
-    const indices = [...step.body_text.matchAll(INGR_PLACEHOLDER)].map((m) => Number(m[1]));
-    const indexSet: Record<number, boolean> = {};
-
-    for (const idx of indices) {
-        const ingr = step.ingredients[idx];
-        if (indexSet[idx]) {
-            ingr.id = 0;
-        }
-
-        ingr.index = bodyIngredients.length;
-        bodyIngredients.push(ingr);
-    }
-
-    step.ingredients = bodyIngredients;
-}
-
 export function RecipeEditStep({step, setStep, ingredientOptions}: {step: RecipeStep, setStep: (r: RecipeStep | null) => void, ingredientOptions: Ingredient[]}) {
     const stepTextContainerStyle: CSSProperties = {
         display: 'flex',
@@ -61,31 +42,22 @@ export function RecipeEditStep({step, setStep, ingredientOptions}: {step: Recipe
         width: '100%',
     };
 
-    const stepTextStyle: CSSProperties = {
-        width: '100%',
-        minHeight: 100,
-        backgroundColor: 'var(--default)',
-        borderRadius: 12,
-        paddingTop: 8,
-        paddingBottom: 8,
-        paddingLeft: 12,
-        paddingRight: 12,
-    };
-
     const addIngredient = (ingr: RecipeIngredient) => {
-        const newStep: RecipeStep = {...step};
-        ingr.index = newStep.ingredients.length;
-        newStep.ingredients.push(ingr);
+        const newStep = {...step};
+        newStep.body_text += ingredientStepString(ingr);
+        setStep(newStep);
+    }
 
-        newStep.body_text += "{{ingr-" + ingr.index.toString() + "}}";
-        reassignIngredientIndices(newStep);
+    const onImageUpload = (dataURI: string) => {
+        const newStep: RecipeStep = {...step};
+        newStep.image_url = dataURI;
         setStep(newStep);
     }
 
     return (
         <div style={stepStyle} className="shadow-surface">
             <div style={stepUpperContainerStyle}>
-                <ImageUpload width={210} height={140}>
+                <ImageUpload width={210} height={140} onImage={onImageUpload} maxArea={1000 * 1000}>
                     {step.image_url !== '' && <CentererdImage src={step.image_url} alt={step.title} width={210} height={140} style={{borderRadius: 12}}/>}
                 </ImageUpload>
                 
@@ -106,16 +78,11 @@ export function RecipeEditStep({step, setStep, ingredientOptions}: {step: Recipe
                         </Button>
                     </div>
                     
-                    <RecipeStepDescriptionText step={step} style={stepTextStyle} onEdit={(v) => {
-                        const newStep: RecipeStep = {...step};
-                        newStep.body_text = v;
-                        reassignIngredientIndices(newStep);
-                        setStep(newStep);
-                    }}/>
+                    <RecipeStepEditDescriptionText step={step} setStep={setStep}/>
                 </div>
             </div>
             
-            <RecipeStepEditIngredients ingredients={step.ingredients} options={ingredientOptions} addIngredient={addIngredient}/>
+            <RecipeStepEditIngredients ingredients={getStepIngredients(step)} options={ingredientOptions} addIngredient={addIngredient}/>
         </div>
     );
 }
@@ -131,7 +98,7 @@ function RecipeStepEditIngredients({ingredients, options, addIngredient}: {ingre
     return (
         <div style={containerStyle} className="no-select">
             {ingredients && ingredients.map((ingredient: RecipeIngredient) => {
-                return <RecipeEditStepIngredientChip key={ingredient.index} ingr={ingredient}/>
+                return <RecipeEditStepIngredientChip key={ingredientStepString(ingredient)} ingr={ingredient}/>
             })}
             <IngredientPopup options={options} allowCreate onSelect={(r: RecipeIngredient) => addIngredient(r)}>
                 <RecipeEditStepIngredientChip/>

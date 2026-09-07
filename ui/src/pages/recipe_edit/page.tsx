@@ -1,12 +1,14 @@
 import { useEffect, useState, type CSSProperties } from "react";
 import { Header } from "../../header/header";
-import { Breadcrumbs, toast } from "@heroui/react";
-import { getRecipe, RecipeAPIError } from "../../recipeAPI";
+import { Breadcrumbs, Button, ButtonGroup, IconPlus, Modal, Spinner, toast, Typography } from "@heroui/react";
+import { getRecipe, RecipeAPIError, saveRecipe } from "../../recipeAPI";
 import type { Ingredient, Recipe } from "../../apiTypes";
-import { useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { RecipeOverviewEdit } from "./overview";
 import { RecipeEditStep } from "./step";
 import { IngredientAPIError, listIngredients } from "../../ingredientAPI";
+import { Camera, FloppyDisk, Sparkles } from "@gravity-ui/icons";
+import { ImportModal } from "./importModal";
 
 
 const contentStyle: CSSProperties = {
@@ -34,11 +36,20 @@ const stepsContainerStyle: CSSProperties = {
     gap: 10,
 };
 
+const toolsContainerStyle: CSSProperties = {
+    width: 270,
+    minWidth: 270,
+};
+
 export function RecipeEditPage() {
     const {id} = useParams<{id: string}>();
     const [recipe, setRecipe] = useState<Recipe | null>(!id ? blankRecipe() : null);
     const [ingredientOptions, setIngredientOptions] = useState<Ingredient[] | null>(null);
     const [pendingUpdate, setPendingUpdate] = useState<boolean>(false);
+    const [importMode, setImportMode] = useState<'web' | 'photos' | null>(null);
+    const [saving, setSaving] = useState<boolean>(false);
+
+    const navigate = useNavigate();
 
     useEffect(() => {
         if (!id) {
@@ -67,6 +78,41 @@ export function RecipeEditPage() {
         setPendingUpdate(true);
     }
 
+    const addStep = () => {
+        if (!recipe) return;
+
+        const newRecipe: Recipe = {...recipe};
+        if (!newRecipe.steps) {
+            newRecipe.steps = [];
+        }
+
+        newRecipe.steps.push({
+            id: 0,
+            title: '',
+            image_url: '',
+            body_text: '',
+        });
+
+        setRecipe(newRecipe);
+    }
+
+    const onSaveRecipe = () => {
+        if (!recipe) {
+            return;
+        }
+
+        setSaving(true);
+        saveRecipe(recipe).then((id: number) => {
+            setSaving(false);
+            navigate("/recipes/view/" + id.toString());
+        }).catch((reason: RecipeAPIError) => {
+            setSaving(false);
+            toast.danger("Failed to Save Recipe", {
+                description: reason.message,
+            });
+        });
+    }
+
     return (
         <>
             <Header/>
@@ -85,9 +131,7 @@ export function RecipeEditPage() {
                                 if (newStep == null) {
                                     // Remove the step
                                     newRecipe.steps.splice(idx, 1);
-                                    for (let i = idx; i < newRecipe.steps.length; i++) {
-                                        newRecipe.steps[i].index = i;
-                                    }
+
                                     updateRecipe(newRecipe);
                                     return;
                                 }
@@ -96,12 +140,64 @@ export function RecipeEditPage() {
                                 updateRecipe(newRecipe);
                             }}/>
                         })}
+                        {!id && !pendingUpdate ? 
+                            <GetStarted setImportMode={setImportMode} addStep={addStep}/> :
+                            <Button onClick={addStep}>
+                                <IconPlus style={{width: 16, height: 16}}/>
+                                Add Step
+                            </Button>}
                     </div>
-                    {pendingUpdate.toString()}
+                    <div style={toolsContainerStyle}>
+                        <ButtonGroup variant="primary" fullWidth>
+                            <Button isDisabled={!pendingUpdate} onClick={onSaveRecipe}>
+                                <FloppyDisk style={{width: 16, height: 16}}/>
+                                Save
+                            </Button>
+                        </ButtonGroup>
+                    </div>
                 </div>
             </div>
+            <ImportModal onClose={() => setImportMode(null)} mode={importMode} onRecipeImport={(recipe) => {
+                updateRecipe(recipe);
+                setImportMode(null);
+            }}/>
+            <SavingModal isOpen={saving}/>
         </>
     );
+}
+
+function GetStarted({setImportMode, addStep}: {setImportMode: (mode: 'web' | 'photos') => void, addStep: () => void}) {
+    return (<ButtonGroup variant="primary">
+        <Button onClick={() => setImportMode('web')}>
+            <Sparkles style={{width: 16, height: 16}}/>
+            Web Import
+        </Button>
+        <Button onClick={() => setImportMode('photos')}>
+            <ButtonGroup.Separator />
+            <Camera style={{width: 16, height: 16}}/>
+            Import From Photos
+        </Button>
+        <Button onClick={addStep}>
+            <ButtonGroup.Separator />
+            <IconPlus style={{width: 16, height: 16}}/>
+            Add Step
+        </Button>
+    </ButtonGroup>);
+}
+
+function SavingModal({isOpen}: {isOpen: boolean}) {
+    return (
+        <Modal.Backdrop isOpen={isOpen}>
+            <Modal.Container>
+                <Modal.Dialog style={{display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center'}}>
+                    <Typography type="h5" weight="semibold">
+                        Saving Recipe
+                    </Typography>
+                    <Spinner size="lg"/>
+                </Modal.Dialog>
+            </Modal.Container>
+        </Modal.Backdrop>
+    )
 }
 
 function blankRecipe(): Recipe {
@@ -117,25 +213,24 @@ function blankRecipe(): Recipe {
         ingredients: [],
         steps: [],
         total_time: {
-            index: 0,
             start_time: 0,
             unit: "second",
         },
         nutrition: {
             servings: 1,
-            serving_mass: 0,
+            serving_mass: -1,
             serving_mass_unit: "gram",
             is_auto_generated: false,
-            calories: 0,
-            total_fat_grams: 0,
-            saturated_fat_grams: 0,
-            trans_fat_grams: 0,
-            cholestrol_mg: 0,
-            sodium_mg: 0,
-            total_carbs_grams: 0,
-            dietary_fiber_grams: 0,
-            total_sugar_grams: 0,
-            protein_grams: 0
+            calories: -1,
+            total_fat_grams: -1,
+            saturated_fat_grams: -1,
+            trans_fat_grams: -1,
+            cholestrol_mg: -1,
+            sodium_mg: -1,
+            total_carbs_grams: -1,
+            dietary_fiber_grams: -1,
+            total_sugar_grams: -1,
+            protein_grams: -1
         },
         category: "",
         protein: "",

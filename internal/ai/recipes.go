@@ -6,6 +6,7 @@ import (
 	"encoding/xml"
 	"fmt"
 	"io"
+	"log/slog"
 	"strconv"
 	"strings"
 
@@ -67,7 +68,13 @@ func ExtractRecipeFromHTML(ctx context.Context, providers config.Providers, text
 
 	decoder := xml.NewDecoder(strings.NewReader(modelOutput))
 
-	return parseRecipe(decoder)
+	recipe, err := parseRecipe(decoder)
+	if err != nil {
+		providers.Log().Debug("model output", slog.String("output", modelOutput))
+		return nil, err
+	}
+
+	return recipe, nil
 }
 
 type FileAttachment struct {
@@ -124,7 +131,13 @@ func ExtractRecipeFromPhotos(ctx context.Context, providers config.Providers, fi
 
 	decoder := xml.NewDecoder(strings.NewReader(modelOutput))
 
-	return parseRecipe(decoder)
+	recipe, err := parseRecipe(decoder)
+	if err != nil {
+		providers.Log().Debug("model output", slog.String("output", modelOutput))
+		return nil, err
+	}
+
+	return recipe, nil
 }
 
 func parseRecipe(decoder *xml.Decoder) (*models.Recipe, error) {
@@ -169,8 +182,6 @@ func parseRecipe(decoder *xml.Decoder) (*models.Recipe, error) {
 			ret.TotalTime, err = parseTimeElement(se)
 		case "nutrition":
 			ret.Nutrition, err = parseNutrition(decoder, se)
-		case "ingredients":
-			ret.Ingredients, err = parseIngredients(decoder)
 		case "steps":
 			ret.Steps, err = parseSteps(decoder)
 		}
@@ -210,10 +221,16 @@ func getAttr(el xml.StartElement, name string) string {
 func parseIngredientElement(el xml.StartElement) (models.RecipeIngredient, error) {
 	name := getAttr(el, "name")
 	qtyStr := getAttr(el, "quantity")
-	qty, err := strconv.ParseFloat(qtyStr, 32)
-	if err != nil {
-		return models.RecipeIngredient{}, fmt.Errorf("ingredient '%s' failed to parse quantity '%s': %w", name, qtyStr, err)
+
+	var qty float32 = 1
+	if qtyStr != "" {
+		qty64, err := strconv.ParseFloat(qtyStr, 32)
+		if err != nil {
+			return models.RecipeIngredient{}, fmt.Errorf("ingredient '%s' failed to parse quantity '%s': %w", name, qtyStr, err)
+		}
+		qty = float32(qty64)
 	}
+
 	return models.RecipeIngredient{
 		Ingredient: models.Ingredient{Name: name},
 		Quantity:   float32(qty),
@@ -331,30 +348,6 @@ func applyNutrient(n *models.RecipeNutrition, el xml.StartElement) error {
 	return nil
 }
 
-func parseIngredients(decoder *xml.Decoder) ([]models.RecipeIngredient, error) {
-	var ingredients []models.RecipeIngredient
-	for {
-		tok, err := decoder.Token()
-		if err != nil {
-			return nil, err
-		}
-		switch t := tok.(type) {
-		case xml.StartElement:
-			if t.Name.Local == "ingredient" {
-				ingr, err := parseIngredientElement(t)
-				if err != nil {
-					return nil, err
-				}
-				ingredients = append(ingredients, ingr)
-			}
-		case xml.EndElement:
-			if t.Name.Local == "ingredients" {
-				return ingredients, nil
-			}
-		}
-	}
-}
-
 func parseSteps(decoder *xml.Decoder) ([]models.RecipeStep, error) {
 	var steps []models.RecipeStep
 	for {
@@ -402,15 +395,13 @@ func parseStep(decoder *xml.Decoder, el xml.StartElement) (models.RecipeStep, er
 				if err != nil {
 					return step, err
 				}
-				fmt.Fprintf(&body, "{{ingr-%d}}", len(step.Ingredients))
-				step.Ingredients = append(step.Ingredients, ingr)
+				fmt.Fprint(&body, models.RecipeIngredientString(ingr))
 			case "time":
 				rt, err := parseTimeElement(t)
 				if err != nil {
 					return step, err
 				}
-				fmt.Fprintf(&body, "{{time-%d}}", len(step.Times))
-				step.Times = append(step.Times, rt)
+				fmt.Fprint(&body, models.RecipeTimeString(rt))
 			case "br":
 				body.WriteString(brMarker)
 			}

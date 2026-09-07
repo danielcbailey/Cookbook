@@ -72,7 +72,7 @@ type Transaction interface {
 	ListIngredients(userID int64, offset, limit int) ([]*models.Ingredient, error)
 	GetIngredientCategories(userID int64) ([]string, error)
 	GetIngredientsByCategory(userID int64, category string) ([]*models.Ingredient, error)
-	GetIngredientByID(userID int64, ID int64) (*models.Ingredient, error)
+	GetIngredientByName(userID int64, name string) (*models.Ingredient, error)
 	// CreateIngredient stores the ingredient and returns its newly assigned ID.
 	CreateIngredient(ingredient *models.Ingredient) (int64, error)
 	UpdateIngredient(ingredient *models.Ingredient) error

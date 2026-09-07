@@ -1,5 +1,11 @@
 package models
 
+import (
+	"fmt"
+	"strconv"
+	"strings"
+)
+
 type RecipeTag struct {
 	ID     int64  `json:"id"`
 	UserID int64  `json:"user_id"`
@@ -7,8 +13,6 @@ type RecipeTag struct {
 }
 
 type RecipeTime struct {
-	StepID    int64          `json:"step_id,omitempty"`
-	Index     int            `json:"index"`
 	StartTime float32        `json:"start_time"`
 	EndTime   float32        `json:"end_time,omitempty"`
 	Unit      RecipeTimeUnit `json:"unit"`
@@ -16,22 +20,20 @@ type RecipeTime struct {
 
 type RecipeIngredient struct {
 	ID         int64          `json:"id"`
-	StepID     int64          `json:"step_id,omitempty"`
-	Index      int            `json:"index"`
+	RecipeID   int64          `json:"-"`
 	Ingredient Ingredient     `json:"ingredient"`
 	Quantity   float32        `json:"quantity"`
 	Unit       IngredientUnit `json:"unit"`
+	rawString  string         `json:"-"`
 }
 
 type RecipeStep struct {
-	ID          int64              `json:"id"`
-	RecipeID    int64              `json:"omit"`
-	Index       int                `json:"index"`
-	Title       string             `json:"title"`
-	ImageURL    string             `json:"image_url"`
-	BodyText    string             `json:"body_text"` // contains references to ingredients/times in the format of {{ingr-idx}} and {{time-idx}}
-	Ingredients []RecipeIngredient `json:"ingredients"`
-	Times       []RecipeTime       `json:"times"`
+	ID       int64  `json:"id"`
+	RecipeID int64  `json:"-"`
+	Index    int    `json:"-"`
+	Title    string `json:"title"`
+	ImageURL string `json:"image_url"`
+	BodyText string `json:"body_text"` // contains references to ingredients/times in the format of {{ingr-idx}} and {{time-idx}}
 }
 
 type Recipe struct {
@@ -43,10 +45,10 @@ type Recipe struct {
 	Author      string             `json:"author"`
 	Publisher   string             `json:"publisher"`
 	Servings    int                `json:"servings"`
-	Ingredients []RecipeIngredient `json:"ingredients"`
 	Steps       []RecipeStep       `json:"steps"`
 	TotalTime   RecipeTime         `json:"total_time"`
 	Nutrition   RecipeNutrition    `json:"nutrition"`
+	Ingredients []RecipeIngredient `json:"ingredients"`
 
 	Category      string      `json:"category"`
 	Protein       string      `json:"protein"`
@@ -95,3 +97,83 @@ const (
 	RecipeTimeUnitDays    RecipeTimeUnit = "day"
 	RecipeTimeUnitWeeks   RecipeTimeUnit = "week"
 )
+
+func RecipeIngredientString(ri RecipeIngredient) string {
+	return fmt.Sprintf("{i:%g,%s,%s}", ri.Quantity, ri.Unit, ri.Ingredient.Name)
+}
+
+func RecipeTimeString(rt RecipeTime) string {
+	if rt.EndTime > 0 {
+		return fmt.Sprintf("{t:%g-%g,%s}", rt.StartTime, rt.EndTime, rt.Unit)
+	} else {
+		return fmt.Sprintf("{t:%g,%s}", rt.StartTime, rt.Unit)
+	}
+}
+
+func GetRecipeStepIngredients(step RecipeStep) []RecipeIngredient {
+	var ingredients []RecipeIngredient
+
+	split := splitStepBody(step.BodyText)
+	for _, part := range split {
+		if strings.HasPrefix(part, "{i:") && strings.HasSuffix(part, "}") {
+			threeParts := strings.SplitN(part[3:len(part)-1], ",", 3)
+			if len(threeParts) != 3 {
+				continue
+			}
+
+			var ingr RecipeIngredient
+			qty, err := strconv.ParseFloat(threeParts[0], 32)
+			if err != nil {
+				continue
+			}
+
+			ingr.Quantity = float32(qty)
+			ingr.Unit = IngredientUnit(threeParts[1])
+			ingr.Ingredient = Ingredient{Name: threeParts[2]}
+			ingr.rawString = part
+
+			ingredients = append(ingredients, ingr)
+		}
+	}
+
+	return ingredients
+}
+
+func (ri RecipeIngredient) Replace(step *RecipeStep, newIngr RecipeIngredient) {
+	newStr := RecipeIngredientString(newIngr)
+	step.BodyText = strings.Replace(step.BodyText, ri.rawString, newStr, 1)
+}
+
+func splitStepBody(body string) []string {
+	ret := []string{}
+	workingPortion := strings.Builder{}
+	depth := 0
+	for i := 0; i < len(body); i++ {
+		c := body[i]
+		if c == '{' {
+			if depth == 0 {
+				if workingPortion.Len() > 0 {
+					ret = append(ret, workingPortion.String())
+					workingPortion.Reset()
+				}
+			}
+			depth++
+		} else if c == '}' {
+			depth--
+			if depth <= 0 {
+				depth = 0
+				workingPortion.WriteByte(c)
+				ret = append(ret, workingPortion.String())
+				workingPortion.Reset()
+				continue
+			}
+		}
+		workingPortion.WriteByte(c)
+	}
+
+	if workingPortion.Len() > 0 {
+		ret = append(ret, workingPortion.String())
+	}
+
+	return ret
+}

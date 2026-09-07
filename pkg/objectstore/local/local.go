@@ -105,6 +105,10 @@ func (s *localStore) DeleteFile(_ context.Context, path string) (int64, error) {
 	return size, nil
 }
 
+func (_ *localStore) HostsURL(url string) bool {
+	return strings.HasPrefix(url, "/")
+}
+
 func (_ *localStore) GetPresignedURL(_ context.Context, _ string, _ time.Duration) (string, error) {
 	return "", objectstore.ErrPresignUnsupported
 }

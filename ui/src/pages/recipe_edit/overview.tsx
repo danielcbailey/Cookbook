@@ -1,10 +1,10 @@
 import { useState, type CSSProperties } from "react";
 import type { Recipe } from "../../apiTypes";
 import { CentererdImage, RecipeTag } from "../../shared/recipeCard";
-import {Picture} from '@gravity-ui/icons';
 import { Description, Input, Label, TextArea, TextField, toast } from "@heroui/react";
 import { PopupTypeSelect, type PopupTypeSelectOption } from "../../shared/popupTypeSelect";
 import { listTags, RecipeAPIError } from "../../recipeAPI";
+import { ImageUpload } from "../../shared/imageUpload";
 
 
 const overviewWidth = 450;
@@ -23,9 +23,15 @@ export function RecipeOverviewEdit({recipe, setRecipe}: {recipe: Recipe, setReci
     const imgWidth = overviewWidth;
     const imgHeight = overviewWidth * 2/3;
 
+    const onImageUpload = (dataURI: string) => {
+        const newRecipe: Recipe = {...recipe};
+        newRecipe.image_url = dataURI;
+        setRecipe(newRecipe);
+    }
+
     return (
         <div style={overviewStyle}>
-            <ImageUpload width={imgWidth} height={imgHeight}>
+            <ImageUpload width={imgWidth} height={imgHeight} onImage={onImageUpload} maxArea={1500 * 1500}>
                 {recipe.image_url !== '' &&
                 <CentererdImage
                     src={recipe.image_url}
@@ -58,39 +64,6 @@ export function RecipeOverviewEdit({recipe, setRecipe}: {recipe: Recipe, setReci
             </div>
 
             <RecipeOverViewTagEdit recipe={recipe} setRecipe={setRecipe}/>
-        </div>
-    );
-}
-
-export function ImageUpload({children, width, height}: {children?: React.ReactNode, width: number, height: number}) {
-    const [hovered, setHovered] = useState<boolean>(false);
-
-    const containerStyle: CSSProperties = {
-        position: 'absolute',
-        top: 0,
-        left: 0,
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 5,
-        alignItems: 'center',
-        justifyContent: 'center',
-        width: width,
-        height: height,
-        backgroundColor: 'var(--default)',
-        borderRadius: 16,
-        cursor: 'pointer',
-        opacity: !children ? undefined : 0.5,
-    };
-
-    const showUpload = hovered || !children;
-
-    return (
-        <div style={{position: 'relative', width: width, height: height, minWidth: width}} onMouseEnter={() => setHovered(true)} onMouseLeave={() => setHovered(false)}>
-            {children}
-            {showUpload && <div style={containerStyle}>
-                <Picture style={{width: 30, height: 30}}/>
-                Upload Image
-            </div>}
         </div>
     );
 }

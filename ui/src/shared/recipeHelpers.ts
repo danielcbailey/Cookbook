@@ -1,4 +1,4 @@
-import { IngredientUnit, RecipeTimeUnit, type RecipeTime } from "../apiTypes";
+import { IngredientUnit, RecipeTimeUnit, type RecipeIngredient, type RecipeStep, type RecipeTime } from "../apiTypes";
 
 export function timeUnitLabel(unit: RecipeTimeUnit): string {
     let unitLabel = "sec";
@@ -241,6 +241,127 @@ export const unknownUnit: unitDetails = {
     usesQuantity: false,
 };
 
+export function parseStepTimeString(str: string): RecipeTime | undefined {
+    if (!str.startsWith('{t:') || !str.endsWith('}')) {
+        return undefined;
+    }
+
+    // start,unit or start-end,unit
+    const inner = str.slice(3, str.length - 1);
+    const comma = inner.indexOf(',');
+    if (comma < 0) {
+        return undefined;
+    }
+
+    const range = inner.slice(0, comma);
+    // Start at 1 so a leading minus stays part of the first number.
+    const dash = range.indexOf('-', 1);
+
+    const startStr = dash < 0 ? range : range.slice(0, dash);
+    const start = Number(startStr);
+    if (startStr.trim() === '' || !Number.isFinite(start)) {
+        return undefined;
+    }
+
+    const time: RecipeTime = {
+        start_time: start,
+        unit: inner.slice(comma + 1) as RecipeTimeUnit,
+    };
+
+    if (dash >= 0) {
+        const endStr = range.slice(dash + 1);
+        const end = Number(endStr);
+        if (endStr.trim() === '' || !Number.isFinite(end)) {
+            return undefined;
+        }
+        time.end_time = end;
+    }
+
+    return time;
+}
+
 export function quantityUnitLabel(unit: IngredientUnit): unitDetails {
     return validUnits[unit] ?? unknownUnit;
+}
+
+export function ingredientStepString(ingr: RecipeIngredient): string {
+    return '{i:' + ingr.quantity.toString() + ',' + ingr.unit + ',' + ingr.ingredient.name + '}';
+}
+
+export function parseIngredientStepString(str: string): RecipeIngredient | null {
+    if (!str.startsWith('{i:') || !str.endsWith('}')) {
+        return null;
+    }
+
+    // qty,unit,name -- the name is the remainder, so it may contain commas.
+    const inner = str.slice(3, str.length - 1);
+    const firstComma = inner.indexOf(',');
+    const secondComma = firstComma < 0 ? -1 : inner.indexOf(',', firstComma + 1);
+    if (secondComma < 0) {
+        return null;
+    }
+
+    const qtyStr = inner.slice(0, firstComma);
+    const qty = Number(qtyStr);
+    if (qtyStr.trim() === '' || !Number.isFinite(qty)) {
+        return null;
+    }
+
+    return {
+        id: 0,
+        ingredient: {
+            id: 0,
+            user_id: 0,
+            name: inner.slice(secondComma + 1),
+            category: '',
+        },
+        quantity: qty,
+        unit: inner.slice(firstComma + 1, secondComma) as IngredientUnit,
+    };
+}
+
+export function getStepIngredients(step: RecipeStep): RecipeIngredient[] {
+    const ingredients: RecipeIngredient[] = [];
+
+    const split = splitStepBody(step.body_text);
+    for (const part of split) {
+        const ingr = parseIngredientStepString(part);
+        if (ingr) {
+            ingredients.push(ingr);
+        }
+    }
+
+    return ingredients;
+}
+
+export function splitStepBody(body: string): string[] {
+    const ret: string[] = [];
+    let workingPortion = '';
+    let depth = 0;
+    for (let i = 0; i < body.length; i++) {
+        const c = body[i];
+        if (c === '{') {
+            if (depth === 0 && workingPortion.length > 0) {
+                ret.push(workingPortion);
+                workingPortion = '';
+            }
+            depth++;
+        } else if (c === '}') {
+            depth--;
+            if (depth <= 0) {
+                depth = 0;
+                workingPortion += c;
+                ret.push(workingPortion);
+                workingPortion = '';
+                continue;
+            }
+        }
+        workingPortion += c;
+    }
+
+    if (workingPortion.length > 0) {
+        ret.push(workingPortion);
+    }
+
+    return ret;
 }

@@ -1,0 +1,8 @@
+
+[contenteditable="true"]:focus {
+    outline: none;
+}
+
+.no-box-unfocused:not(:focus) {
+    box-shadow: none;
+}

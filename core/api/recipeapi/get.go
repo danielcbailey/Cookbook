@@ -38,6 +38,9 @@ func handleGetRecipe(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "invalid recipe ID", http.StatusNotFound)
 			return
 		}
+		p.Log().Error("failed to get recipe", slog.Any("error", err))
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
 	}
 
 	err = recipes.RecipePrepareImageURLs(r.Context(), p, recipe)

@@ -199,20 +199,6 @@ func (tx *localTransaction) CreateOrUpdateRecipeStep(step *models.RecipeStep) (i
 		idx = len(recipe.Steps) - 1
 	}
 
-	for i := range step.Ingredients {
-		step.Ingredients[i].ID = tx.data.nextID()
-		step.Ingredients[i].StepID = step.ID
-	}
-	for i := range step.Times {
-		step.Times[i].StepID = step.ID
-	}
-	if step.Ingredients == nil {
-		step.Ingredients = []models.RecipeIngredient{}
-	}
-	if step.Times == nil {
-		step.Times = []models.RecipeTime{}
-	}
-
 	recipe.Steps[idx] = *step
 	tx.data.Recipes[step.RecipeID] = recipe
 	return step.ID, nil
@@ -316,8 +302,6 @@ func copySteps(steps []models.RecipeStep) []models.RecipeStep {
 	}
 	out := make([]models.RecipeStep, len(steps))
 	for i, s := range steps {
-		s.Ingredients = copyIngredients(s.Ingredients)
-		s.Times = copyTimes(s.Times)
 		out[i] = s
 	}
 	return out

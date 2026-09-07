@@ -34,7 +34,6 @@ type IngredientPopupSelectorProps = {
 
 const defaultWorkingIngredient: RecipeIngredient = {
     id: 0,
-    index: -1,
     quantity: 0,
     unit: IngredientUnit.Unknown,
     ingredient: {

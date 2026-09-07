@@ -13,6 +13,8 @@ var ErrNotFound = errors.New("not found")
 var ErrPresignUnsupported = errors.New("presigned URLs are not supported by this backend")
 
 type ObjectStore interface {
+	// HostsURL returns true if the URL is from the store.
+	HostsURL(url string) bool
 	// StoreFile writes contents at path, overwriting any existing object.
 	// Path components are separated by "/" regardless of host OS.
 	StoreFile(ctx context.Context, path string, contents []byte) error

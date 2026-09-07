@@ -65,17 +65,6 @@ func TestGetRecipeByID_FullGraph(t *testing.T) {
 		Index:    0,
 		Title:    "Boil water",
 		BodyText: "Bring water to a boil",
-		Ingredients: []models.RecipeIngredient{
-			{
-				Index:      0,
-				Ingredient: models.Ingredient{ID: 1, Name: "water"},
-				Quantity:   1,
-				Unit:       models.IngredientUnitLiters,
-			},
-		},
-		Times: []models.RecipeTime{
-			{Index: 0, StartTime: 10, Unit: models.RecipeTimeUnitMinutes},
-		},
 	}
 	if _, err := tx.CreateOrUpdateRecipeStep(&step); err != nil {
 		t.Fatal(err)
@@ -93,12 +82,6 @@ func TestGetRecipeByID_FullGraph(t *testing.T) {
 	}
 	if len(got.Steps) != 1 {
 		t.Fatalf("steps: got %d, want 1", len(got.Steps))
-	}
-	if len(got.Steps[0].Ingredients) != 1 {
-		t.Fatalf("step ingredients: got %d, want 1", len(got.Steps[0].Ingredients))
-	}
-	if len(got.Steps[0].Times) != 1 {
-		t.Fatalf("step times: got %d, want 1", len(got.Steps[0].Times))
 	}
 }
 
@@ -752,14 +735,6 @@ func TestCreateOrUpdateRecipeStep_Create(t *testing.T) {
 		RecipeID: r.ID,
 		Index:    0,
 		Title:    "Step one",
-		Ingredients: []models.RecipeIngredient{
-			{
-				Index:      0,
-				Ingredient: models.Ingredient{ID: 1, Name: "salt"},
-				Quantity:   1,
-				Unit:       models.IngredientUnitTeaspoons,
-			},
-		},
 	}
 	id, err := tx.CreateOrUpdateRecipeStep(&step)
 	if err != nil {
@@ -770,9 +745,6 @@ func TestCreateOrUpdateRecipeStep_Create(t *testing.T) {
 	}
 	if step.ID != id {
 		t.Fatalf("expected step.ID %d to match returned ID %d", step.ID, id)
-	}
-	if step.Ingredients[0].ID == 0 {
-		t.Fatal("ingredient should get an ID")
 	}
 
 	got, _ := tx.GetRecipeByID(r.ID)
@@ -812,48 +784,6 @@ func TestCreateOrUpdateRecipeStep_Update(t *testing.T) {
 	}
 	if got.Steps[0].Title != "Updated" {
 		t.Fatalf("title: got %q, want %q", got.Steps[0].Title, "Updated")
-	}
-}
-
-func TestCreateOrUpdateRecipeStep_ReplacesChildren(t *testing.T) {
-	tx, u := setupRecipeTest(t)
-
-	r := testRecipe(u.ID)
-	tx.CreateRecipe(&r)
-
-	step := models.RecipeStep{
-		RecipeID: r.ID,
-		Index:    0,
-		Title:    "Step",
-		Ingredients: []models.RecipeIngredient{
-			{Index: 0, Ingredient: models.Ingredient{ID: 1, Name: "a"}, Quantity: 1},
-			{Index: 1, Ingredient: models.Ingredient{ID: 2, Name: "b"}, Quantity: 2},
-		},
-		Times: []models.RecipeTime{
-			{Index: 0, StartTime: 5, Unit: models.RecipeTimeUnitMinutes},
-		},
-	}
-	tx.CreateOrUpdateRecipeStep(&step)
-
-	step2 := models.RecipeStep{
-		RecipeID: r.ID,
-		Index:    0,
-		Title:    "Step",
-		Ingredients: []models.RecipeIngredient{
-			{Index: 0, Ingredient: models.Ingredient{ID: 3, Name: "c"}, Quantity: 3},
-		},
-	}
-	tx.CreateOrUpdateRecipeStep(&step2)
-
-	got, _ := tx.GetRecipeByID(r.ID)
-	if len(got.Steps[0].Ingredients) != 1 {
-		t.Fatalf("ingredients should be replaced: got %d, want 1", len(got.Steps[0].Ingredients))
-	}
-	if got.Steps[0].Ingredients[0].Ingredient.Name != "c" {
-		t.Fatalf("ingredient: got %q, want %q", got.Steps[0].Ingredients[0].Ingredient.Name, "c")
-	}
-	if len(got.Steps[0].Times) != 0 {
-		t.Fatalf("times should be replaced: got %d, want 0", len(got.Steps[0].Times))
 	}
 }
 

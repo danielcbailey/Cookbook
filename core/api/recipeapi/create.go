@@ -172,7 +172,7 @@ func handleRecipeSave(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	recipe, ok := apicommon.DecodeRequest[models.Recipe](w, r, 256*apicommon.KiB)
+	recipe, ok := apicommon.DecodeRequest[models.Recipe](w, r, 20*apicommon.MiB)
 	if !ok {
 		return
 	}

@@ -51,8 +51,6 @@ export type RecipeTag = {
 }
 
 export type RecipeTime = {
-    step_id?: number;
-    index: number;
     start_time: number;
     end_time?: number;
     unit: RecipeTimeUnit;
@@ -60,8 +58,6 @@ export type RecipeTime = {
 
 export type RecipeIngredient = {
     id: number;
-    step_id?: number;
-    index: number;
     ingredient: Ingredient;
     quantity: number;
     unit: IngredientUnit;
@@ -69,13 +65,10 @@ export type RecipeIngredient = {
 
 export type RecipeStep = {
     id: number;
-    index: number;
     title: string;
     image_url: string;
-    /** Contains references to ingredients/times in the format {{ingr-idx}} and {{time-idx}}. */
+    /** Contains references to ingredients/times in the format {i:qty,unit,name} and {t:start,end?,unit}. */
     body_text: string;
-    ingredients: RecipeIngredient[];
-    times: RecipeTime[];
 }
 
 export type RecipeNutrition = {

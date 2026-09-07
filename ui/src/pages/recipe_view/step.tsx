@@ -3,7 +3,7 @@ import type { RecipeIngredient, RecipeStep } from "../../apiTypes";
 import { Chip, Typography } from "@heroui/react";
 import { CentererdImage } from "../../shared/recipeCard";
 import {Square, SquareCheck} from '@gravity-ui/icons';
-import { quantityLabel } from "../../shared/recipeHelpers";
+import { getStepIngredients, ingredientStepString, quantityLabel } from "../../shared/recipeHelpers";
 import { RecipeStepDescriptionText } from "./stepBody";
 
 const stepStyle: CSSProperties = {
@@ -40,7 +40,7 @@ export function RecipeStepComponent({step}: {step: RecipeStep}) {
                 </div>
             </div>
             
-            <RecipeStepIngredients ingredients={step.ingredients}/>
+            <RecipeStepIngredients ingredients={getStepIngredients(step)}/>
         </div>
     );
 }
@@ -56,7 +56,7 @@ function RecipeStepIngredients({ingredients}: {ingredients: RecipeIngredient[]})
     return (
         <div style={containerStyle} className="no-select">
             {ingredients && ingredients.map((ingredient: RecipeIngredient) => {
-                return <RecipeStepIngredientChip key={ingredient.index} ingr={ingredient}/>
+                return <RecipeStepIngredientChip key={ingredientStepString(ingredient)} ingr={ingredient}/>
             })}
         </div>
     );

@@ -85,10 +85,20 @@ func (tx *localTransaction) GetIngredientsByCategory(userID int64, category stri
 	return out, nil
 }
 
-func (tx *localTransaction) GetIngredientByID(userID int64, ID int64) (*models.Ingredient, error) {
-	ing, ok := tx.data.Ingredients[ID]
+func (tx *localTransaction) GetIngredientByName(userID int64, name string) (*models.Ingredient, error) {
+	var ing models.Ingredient
+	ok := false
+
+	for _, i := range tx.data.Ingredients {
+		if (i.UserID == userID || i.UserID == 0) && i.Name == name {
+			ing = i
+			ok = true
+			break
+		}
+	}
+
 	if !ok || (ing.UserID != userID && ing.UserID != 0) {
-		return nil, fmt.Errorf("ingredient %d: %w", ID, database.ErrNotFound)
+		return nil, fmt.Errorf("ingredient %s: %w", name, database.ErrNotFound)
 	}
 	cp := copyIngredientModel(ing)
 	return &cp, nil
