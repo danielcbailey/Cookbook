@@ -13,5 +13,7 @@ func Handlers() map[string]http.Handler {
 		"/api/v1/user/":       userapi.Routes(),
 		"/api/v1/recipe/":     recipeapi.Routes(),
 		"/api/v1/ingredient/": ingredientapi.Routes(),
+		"/readyz":             http.HandlerFunc(handleReadyCheck),
+		"/livez":              http.HandlerFunc(handleLiveCheck),
 	}
 }
