@@ -1,5 +1,6 @@
 import type { User } from './apiTypes';
 import { redirectToLogin } from './helpers';
+import { invalidateToken } from './shared/authHelpers';
 
 const basePath = '/api/v1/user';
 
@@ -42,6 +43,7 @@ async function send(path: string, init: RequestInit, options?: RequestOptions & 
         const body = (await response.text()).trim();
 
         if (response.status === 401 && options?.redirectOnUnauthorized !== false) {
+            invalidateToken();
             redirectToLogin();
         }
 
@@ -57,13 +59,16 @@ async function send(path: string, init: RequestInit, options?: RequestOptions & 
  * needs to be kept if requests are to be authorized via the Authorization
  * header instead.
  *
+ * Set longLived when the user asked to be remembered: the server issues a token
+ * with a longer expiry rather than one lasting only the current session.
+ *
  * Throws a UserAPIError with status 401 when the credentials are rejected.
  */
-export async function login(email: string, password: string, options?: RequestOptions): Promise<LoginResult> {
+export async function login(email: string, password: string, longLived: boolean = false, options?: RequestOptions): Promise<LoginResult> {
     const response = await send('/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ email, password, long_lived: longLived }),
     }, { ...options, redirectOnUnauthorized: false });
 
     return await response.json() as LoginResult;

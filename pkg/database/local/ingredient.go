@@ -118,6 +118,7 @@ func (tx *localTransaction) UpdateIngredient(ingredient *models.Ingredient) erro
 
 	existing.Name = ingredient.Name
 	existing.Category = ingredient.Category
+	existing.Density = ingredient.Density
 	existing.FoodKeeperID = ingredient.FoodKeeperID
 	existing.Embedding = ingredient.Embedding
 

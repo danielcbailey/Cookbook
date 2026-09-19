@@ -44,25 +44,27 @@ You will be provided <MEDIUM> of a recipe. Your task is to extract information f
 </recipe>
 
 Acceptable units of quantity are:
-gram, kilogram, milligram, ounce, pound, liter, milliliter, cup, us-tbsp, us-tsp, us-fl-oz, us-gal, us-qt, piece, pinch, container
+{{ingredientUnits}}
 
 Acceptable units of time are:
-second, minute, hour, day, week
+{{recipeTimeUnits}}
 
 Acceptable suggested meals are:
-breakfast, lunch, dinner, dessert, snack
+{{suggestedMeals}}
 
 Pick the most distinctive and relevant category for the recipe. Acceptable categories are:
-bread, pastry, muffin, scone, cake, pie, dessert bar, frozen and cold dessert, cookie, batter bread, pasta and noodles, soup and stew, salad, sandwich and wraps, rice, grilled, roasts and braises, fried food, stir-fry and saute, casserole and bakes, pizza and flatbread, seafood, eggs, savory breakfast, curry, dumplings and filled pasta
+{{recipeCategories}}
 
 Acceptable cuisines are:
-american, german, french, mexican, latin american, italian, japanese, chinese, korean, middle eastern, indian, thai, mediterranean, spanish, caribbean, vietnamese, african, british, southeast asian, fusion, other
+{{recipeCuisines}}
 
 <meta/> can accept a "protein" attribute. If a recipe has a mix of protein, pick the most remarkable or significant one. Its acceptable values are:
-chicken, pork, beef, veal, lamb, duck, turkey, sausage, red meat, poultry, game meat, offal, shrimp, salmon, tuna, cod, crab, halibut, lobster, whitefish, oily fish, crustacean, mollusk
+{{recipeProteins}}
 
 All ingredients should be accounted for in the steps. If an ingredient is missing, you should either attempt to place it in the appropriate step or remove it from the recipe.
 
 Nutrition may be omitted if the recipe does not explicitly state the nutrition facts. Only the above nutrient types may be included, however some may be omitted if not stated in the recipe. If you were able to find the information, you must use the verbatim type name including unit as you see above. No other units may be specified.
+
+You MUST provide a serving count. If servings are not explicitly written in the recipe, estimate how many servings by ingredient quantities and context of the recipe.
 
 If the provided website is not a recipe, respond with exactly <error>Not a recipe</error>

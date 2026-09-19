@@ -11,11 +11,16 @@ import type { User } from './apiTypes'
 import { useEffect, useState } from 'react'
 import { getCurrentUser, UserAPIError } from './userAPI'
 import { RecipeEditPage } from './pages/recipe_edit/page'
+import { LoginPage } from './pages/login/login'
+import { isLoginPage } from './helpers'
 
 function App() {
   const [user, setUser] = useState<User | null>(null);
 
   useEffect(() => {
+    if (isLoginPage()) {
+      return;
+    }
     getCurrentUser().then((user: User) => {
       setUser(user);
     }).catch((reason: UserAPIError) => {
@@ -31,7 +36,7 @@ function App() {
         {/* Renders the toasts enqueued by the module-level toast() helpers. */}
         <Toast.Provider/>
         <Routes>
-          <Route path="/" element={<Navigate to="/plan" replace/>}/>
+          <Route path="/" element={<Navigate to="/recipes" replace/>}/>
           <Route path="/plan" element={<PlanPage/>}/>
           <Route path="/recipes" element={<RecipesPage/>}/>
           <Route path="/recipes/edit/:id" element={<RecipeEditPage/>}/>
@@ -40,6 +45,7 @@ function App() {
           <Route path="/plan/recipe/:id" element={<RecipeViewPage parent="Plan"/>}/>
           <Route path="/pantry" element={<PantryPage/>}/>
           <Route path="/profile" element={<ProfilePage/>}/>
+          <Route path="/login" element={<LoginPage/>}/>
         </Routes>
       </BrowserRouter>
     </UserContext>

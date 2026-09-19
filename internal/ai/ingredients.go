@@ -17,15 +17,32 @@ import (
 )
 
 //go:embed ingredientAssociationPrompt.txt
-var ingredientAssociationPrompt string
+var ingredientAssociationPromptTemplate string
 
-//go:embed foodkeeperAssociationPrompt.txt
-var foodkeeperAssociationPrompt string
+//go:embed ingredientCreationPrompt.txt
+var ingredientCreationPromptTemplate string
+
+// The prompts are static once the enum values are substituted in, so they are
+// rendered once here rather than on every request.
+var (
+	ingredientAssociationPrompt = renderPrompt(ingredientAssociationPromptTemplate)
+	ingredientCreationPrompt    = renderPrompt(ingredientCreationPromptTemplate)
+)
 
 // AssociateIngredient solves the problem of picking the best matching ingredient from a list of close candidates - if any at all. If the model determines
 // that none of the provided candidates are a suitable match, it will return a new ingredient with ID 0 and the name of the suggested ingredient.
 func AssociateIngredient(ctx context.Context, providers config.Providers, candidates []*models.Ingredient, queryContext, query string) (*models.Ingredient, error) {
-	ingredientIDStr, category, err := ingredientAssociationBase(ctx, providers, buildIngredientAssociationUserMessage(candidates, queryContext, query), ingredientAssociationPrompt)
+	var ingredientIDStr string
+	var err error
+
+	attempts := 2
+	for range attempts {
+		ingredientIDStr, err = ingredientAssociation(ctx, providers, ingredientAssociationPrompt, buildIngredientAssociationUserMessage(candidates, queryContext, query))
+		if err == nil {
+			break
+		}
+	}
+
 	if err != nil {
 		return nil, err
 	}
@@ -33,9 +50,8 @@ func AssociateIngredient(ctx context.Context, providers config.Providers, candid
 	ingredientID, err := strconv.ParseInt(ingredientIDStr, 10, 64)
 	if err != nil {
 		return &models.Ingredient{
-			ID:       0,
-			Name:     ingredientIDStr,
-			Category: category,
+			ID:   0,
+			Name: ingredientIDStr,
 		}, nil
 	}
 
@@ -48,44 +64,64 @@ func AssociateIngredient(ctx context.Context, providers config.Providers, candid
 	return nil, fmt.Errorf("ingredient ID %d not found in candidates", ingredientID)
 }
 
-func AssociateFoodkeeper(ctx context.Context, providers config.Providers, candidates []*models.FoodKeeperProduct, query string) (*models.FoodKeeperProduct, error) {
-	ingredientIDStr, _, err := ingredientAssociationBase(ctx, providers, buildFoodkeeperAssociationUserMessage(candidates, query), foodkeeperAssociationPrompt)
+func AssociateNewIngredient(ctx context.Context, providers config.Providers, candidates []*models.FoodKeeperProduct, query string) (foodkeeper *models.FoodKeeperProduct, density float64, category string, retErr error) {
+	var ingredientIDStr string
+	var err error
+
+	attempts := 2
+	for range attempts {
+		ingredientIDStr, category, density, err = ingredientCreation(ctx, providers, ingredientCreationPrompt, buildFoodkeeperAssociationUserMessage(candidates, query))
+		if err == nil {
+			break
+		}
+	}
+
+	if err != nil {
+		providers.Log().Warn("failed to get model output for ingredient creation", slog.Any("error", err))
+	}
+
+	if density == 0 {
+		density = 1
+	}
 
 	ingredientID, err := strconv.ParseInt(ingredientIDStr, 10, 64)
 	if err != nil {
-		return &models.FoodKeeperProduct{
+		foodkeeper = &models.FoodKeeperProduct{
 			ID:   0,
 			Name: ingredientIDStr,
-		}, nil
+		}
+		return
 	}
 
 	for _, candidate := range candidates {
 		if candidate.ID == ingredientID {
-			return candidate, nil
+			foodkeeper = candidate
+			return
 		}
 	}
 
-	return nil, fmt.Errorf("foodkeeper ID %d not found in candidates", ingredientID)
+	retErr = fmt.Errorf("foodkeeper ID %d not found in candidates", ingredientID)
+	return
 }
 
-// returns primary value, type, and error
-func ingredientAssociationBase(ctx context.Context, providers config.Providers, prompt, userMessage string) (string, string, error) {
+// returns primary value, and error
+func ingredientAssociation(ctx context.Context, providers config.Providers, prompt, userMessage string) (string, error) {
 	response, err := providers.OpenAI().Chat.Completions.New(ctx, openai.ChatCompletionNewParams{
 		Model:           openai.ChatModelGPT5_6Terra,
-		Temperature:     param.NewOpt[float64](0.2),
+		Temperature:     param.NewOpt(0.2),
 		ReasoningEffort: openai.ReasoningEffortNone,
 		Messages: []openai.ChatCompletionMessageParamUnion{
 			{
 				OfSystem: &openai.ChatCompletionSystemMessageParam{
 					Content: openai.ChatCompletionSystemMessageParamContentUnion{
-						OfString: param.NewOpt[string](prompt),
+						OfString: param.NewOpt(prompt),
 					},
 				},
 			},
 			{
 				OfUser: &openai.ChatCompletionUserMessageParam{
 					Content: openai.ChatCompletionUserMessageParamContentUnion{
-						OfString: param.NewOpt[string](userMessage),
+						OfString: param.NewOpt(userMessage),
 					},
 				},
 			},
@@ -93,7 +129,63 @@ func ingredientAssociationBase(ctx context.Context, providers config.Providers, 
 	})
 
 	if err != nil {
-		return "", "", err
+		return "", err
+	}
+
+	modelOutput := response.Choices[len(response.Choices)-1].Message.Content
+
+	var answer struct {
+		XMLName xml.Name `xml:"answer"`
+		Value   string   `xml:",chardata"`
+	}
+
+	answerStart := strings.Index(modelOutput, "<answer")
+	answerEnd := strings.Index(modelOutput, "</answer>")
+	if answerStart == -1 || answerEnd == -1 {
+		return "", fmt.Errorf("invalid model output: %s", modelOutput)
+	}
+	answerXML := modelOutput[answerStart : answerEnd+len("</answer>")]
+
+	if err = xml.Unmarshal([]byte(answerXML), &answer); err != nil {
+		return "", fmt.Errorf("invalid model output: %s", modelOutput)
+	}
+
+	idStr := strings.TrimSpace(answer.Value)
+
+	if idStr == "" {
+		providers.Log().Debug("invalid associate ingredients model output", slog.String("output", modelOutput))
+	}
+
+	return idStr, nil
+}
+
+// returns primary value, type, density, and error
+func ingredientCreation(ctx context.Context, providers config.Providers, prompt, userMessage string) (value string, category string, density float64, retErr error) {
+	response, err := providers.OpenAI().Chat.Completions.New(ctx, openai.ChatCompletionNewParams{
+		Model:           openai.ChatModelGPT5_6Terra,
+		Temperature:     param.NewOpt(0.2),
+		ReasoningEffort: openai.ReasoningEffortNone,
+		Messages: []openai.ChatCompletionMessageParamUnion{
+			{
+				OfSystem: &openai.ChatCompletionSystemMessageParam{
+					Content: openai.ChatCompletionSystemMessageParamContentUnion{
+						OfString: param.NewOpt(prompt),
+					},
+				},
+			},
+			{
+				OfUser: &openai.ChatCompletionUserMessageParam{
+					Content: openai.ChatCompletionUserMessageParamContentUnion{
+						OfString: param.NewOpt(userMessage),
+					},
+				},
+			},
+		},
+	})
+
+	if err != nil {
+		retErr = err
+		return
 	}
 
 	modelOutput := response.Choices[len(response.Choices)-1].Message.Content
@@ -101,28 +193,34 @@ func ingredientAssociationBase(ctx context.Context, providers config.Providers, 
 	var answer struct {
 		XMLName xml.Name `xml:"answer"`
 		Type    string   `xml:"type,attr"`
+		Density float64  `xml:"density,attr"`
 		Value   string   `xml:",chardata"`
 	}
 
 	answerStart := strings.Index(modelOutput, "<answer")
 	answerEnd := strings.Index(modelOutput, "</answer>")
 	if answerStart == -1 || answerEnd == -1 {
-		return "", "", fmt.Errorf("invalid model output: %s", modelOutput)
+		retErr = fmt.Errorf("invalid model output: %s", modelOutput)
+		return
 	}
 	answerXML := modelOutput[answerStart : answerEnd+len("</answer>")]
 
 	if err = xml.Unmarshal([]byte(answerXML), &answer); err != nil {
-		return "", "", fmt.Errorf("invalid model output: %s", modelOutput)
+		retErr = fmt.Errorf("invalid model output: %s", modelOutput)
+		return
 	}
 
-	idStr := strings.TrimSpace(answer.Value)
-	category := strings.TrimSpace(answer.Type)
+	value = strings.TrimSpace(answer.Value)
+	category = strings.TrimSpace(answer.Type)
+	density = answer.Density
 
-	if idStr == "" {
-		providers.Log().Debug("invalid associate ingredients model output", slog.String("output", modelOutput))
+	if value == "" || density == 0 {
+		retErr = fmt.Errorf("invalid associate ingredients model output: %s", modelOutput)
+		return
 	}
 
-	return idStr, category, nil
+	retErr = nil
+	return
 }
 
 func buildIngredientAssociationUserMessage(candidates []*models.Ingredient, queryContext, query string) string {
@@ -144,7 +242,12 @@ func buildFoodkeeperAssociationUserMessage(candidates []*models.FoodKeeperProduc
 	builder.WriteString(query)
 	builder.WriteString("\nTOP CANDIDATES:\n")
 	for _, candidate := range candidates {
-		builder.WriteString(fmt.Sprintf("%d: %s\n", candidate.ID, candidate.Name))
+		name := candidate.Name
+		if candidate.NameSubtitle != "" {
+			name = name + " - " + candidate.NameSubtitle
+		}
+
+		builder.WriteString(fmt.Sprintf("%d: %s\n", candidate.ID, name))
 	}
 	return builder.String()
 }

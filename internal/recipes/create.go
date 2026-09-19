@@ -14,6 +14,7 @@ import (
 	"math"
 	"net/http"
 	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -22,6 +23,7 @@ import (
 	"github.com/danielcbailey/Cookbook/core/config"
 	"github.com/danielcbailey/Cookbook/core/models"
 	"github.com/danielcbailey/Cookbook/internal/ai"
+	"github.com/danielcbailey/Cookbook/internal/pantry"
 	"github.com/danielcbailey/Cookbook/pkg/database"
 	"github.com/google/uuid"
 	"golang.org/x/image/draw"
@@ -453,6 +455,66 @@ func scaleImage(img image.Image) image.Image {
 	return scaled
 }
 
+func consolidateRecipeIngredients(providers config.Providers, recipe *models.Recipe) {
+	distinctIngredients := make(map[string]models.RecipeIngredient)
+	extras := make([]models.RecipeIngredient, 0)
+
+	for _, ingr := range recipe.Ingredients {
+		existing, ok := distinctIngredients[ingr.Ingredient.Name]
+		if !ok {
+			existing = ingr
+		} else {
+			var err error
+			existing, err = pantry.AddRecipeIngredients(existing, ingr)
+			if err != nil {
+				providers.Log().Info("could not add ingredients",
+					slog.String("ingredient_name", ingr.Ingredient.Name),
+					slog.String("acc_unit", string(existing.Unit)),
+					slog.String("add_unit", string(ingr.Unit)))
+				extras = append(extras, ingr)
+				continue
+			}
+		}
+
+		distinctIngredients[ingr.Ingredient.Name] = existing
+	}
+
+	// Converting to slice
+	recipe.Ingredients = make([]models.RecipeIngredient, 0, len(distinctIngredients)+len(extras))
+
+	for _, ingr := range distinctIngredients {
+		recipe.Ingredients = append(recipe.Ingredients, ingr)
+	}
+
+	for _, ingr := range extras {
+		recipe.Ingredients = append(recipe.Ingredients, ingr)
+	}
+
+	// Sorting by quantity, name as a fallback
+	slices.SortFunc(recipe.Ingredients, func(a, b models.RecipeIngredient) int {
+		aG, aErr := pantry.ConvertIngredientUnit(a.Ingredient.Density, a.Quantity, a.Unit, models.IngredientUnitGrams)
+		bG, bErr := pantry.ConvertIngredientUnit(b.Ingredient.Density, b.Quantity, b.Unit, models.IngredientUnitGrams)
+
+		diff := func(x float32) int {
+			if x < 0 {
+				return int(math.Floor(float64(x)))
+			}
+			return int(math.Ceil(float64(x)))
+		}
+
+		switch {
+		case aErr == nil && bErr == nil:
+			return diff(bG - aG)
+		case aErr == nil:
+			return -1
+		case bErr == nil:
+			return 1
+		default:
+			return strings.Compare(a.Ingredient.Name, b.Ingredient.Name)
+		}
+	})
+}
+
 func getOrCreateIngredients(ctx context.Context, providers config.Providers, tx database.Transaction, recipe *models.Recipe) error {
 	recipe.Ingredients = []models.RecipeIngredient{}
 	for _, step := range recipe.Steps {
@@ -473,7 +535,7 @@ func getOrCreateIngredients(ctx context.Context, providers config.Providers, tx 
 			// Must create the ingredient
 			providers.Log().Debug("creating ingredient", slog.String("recipe_ingredient", ingredient.Ingredient.Name))
 
-			id, err = createIngredient(ctx, providers, tx, ingredient.Ingredient.Name, "unknown")
+			id, err = createIngredient(ctx, providers, tx, ingredient.Ingredient.Name)
 			if err != nil {
 				return fmt.Errorf("failed to create new ingredient: %w", err)
 			}
@@ -488,14 +550,14 @@ func getOrCreateIngredients(ctx context.Context, providers config.Providers, tx 
 		recipe.Ingredients[i].Ingredient.ID = mapping[strings.ToLower(ingredient.Ingredient.Name)]
 	}
 
+	consolidateRecipeIngredients(providers, recipe)
+
 	return nil
 }
 
-func createIngredient(ctx context.Context, providers config.Providers, tx database.Transaction, name, category string) (int64, error) {
+func createIngredient(ctx context.Context, providers config.Providers, tx database.Transaction, name string) (int64, error) {
 	if name == "" {
 		return 0, fmt.Errorf("ingredient name may not be emtpy")
-	} else if category == "" {
-		return 0, fmt.Errorf("ingredient category may not be empty. Ingredient: %s", name)
 	}
 
 	// Name may be different than recipe original name, so a new embedding is required.
@@ -504,15 +566,16 @@ func createIngredient(ctx context.Context, providers config.Providers, tx databa
 		return 0, err
 	}
 
-	foodkeeperID, err := getFoodkeeperID(ctx, providers, tx, name, embedding)
+	foodkeeperID, density, category, err := getFoodkeeperID(ctx, providers, tx, name, embedding)
 	if err != nil {
-		return 0, fmt.Errorf("failed to associate with foodkeeper: %w", err)
+		providers.Log().Warn("failed to associate with foodkeeper", slog.Any("error", err))
 	}
 
 	ingredient := &models.Ingredient{
 		UserID:       providers.User().ID,
 		Name:         name,
 		Category:     category,
+		Density:      density,
 		FoodKeeperID: foodkeeperID,
 		Embedding:    embedding,
 	}
@@ -520,17 +583,20 @@ func createIngredient(ctx context.Context, providers config.Providers, tx databa
 	return tx.CreateIngredient(ingredient)
 }
 
-func getFoodkeeperID(ctx context.Context, providers config.Providers, tx database.Transaction, name string, embedding []float32) (int64, error) {
+func getFoodkeeperID(ctx context.Context, providers config.Providers, tx database.Transaction, name string, embedding []float32) (int64, float64, string, error) {
 	query := name
+	var density float64
+	var category string
 	for range 2 {
 		candidates, err := tx.SearchFoodKeeperProductsBySemanticSimilarity(embedding, 10)
 		if err != nil {
-			return 0, err
+			return 0, 0, "", err
 		}
 
-		selected, err := ai.AssociateFoodkeeper(ctx, providers, candidates, query)
+		var selected *models.FoodKeeperProduct
+		selected, density, category, err = ai.AssociateNewIngredient(ctx, providers, candidates, query)
 		if err != nil {
-			return 0, err
+			return 0, density, category, err
 		}
 
 		if selected.ID == 0 {
@@ -540,13 +606,13 @@ func getFoodkeeperID(ctx context.Context, providers config.Providers, tx databas
 			query = selected.Name
 			embedding, err = ai.ConvertToEmbedding(ctx, providers, query)
 			if err != nil {
-				return 0, err
+				return 0, density, category, err
 			}
 		} else {
 			providers.Log().Debug("associated ingredient with foodkeeper", slog.String("ingredient_name", name), slog.String("foodkeeper_name", selected.Name))
-			return selected.ID, nil
+			return selected.ID, density, category, nil
 		}
 	}
 
-	return 0, nil
+	return 0, density, category, nil
 }

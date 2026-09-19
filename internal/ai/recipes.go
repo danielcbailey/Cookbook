@@ -20,7 +20,10 @@ import (
 )
 
 //go:embed recipeExtractionPrompt.txt
-var recipeExtractionPrompt string
+var recipeExtractionPromptTemplate string
+
+// The enum values are substituted once here; only <MEDIUM> varies per request.
+var recipeExtractionPrompt = renderPrompt(recipeExtractionPromptTemplate)
 
 const (
 	recipeMediumHTML  = "the HTML content"
@@ -32,7 +35,19 @@ func getRecipeExtractionPrompt(medium string) string {
 }
 
 // ExtractRecipeFromMedium takes the provided HTML and extracts a Recipe object.
-func ExtractRecipeFromHTML(ctx context.Context, providers config.Providers, text string) (*models.Recipe, error) {
+func ExtractRecipeFromHTML(ctx context.Context, providers config.Providers, text string) (ret *models.Recipe, err error) {
+	attempts := 2
+	for range attempts {
+		ret, err = extractRecipeFromHTMLInner(ctx, providers, text)
+		if err == nil {
+			break
+		}
+	}
+
+	return
+}
+
+func extractRecipeFromHTMLInner(ctx context.Context, providers config.Providers, text string) (*models.Recipe, error) {
 	prompt := getRecipeExtractionPrompt(recipeMediumHTML)
 
 	response, err := providers.OpenAI().Chat.Completions.New(ctx, openai.ChatCompletionNewParams{
@@ -63,7 +78,7 @@ func ExtractRecipeFromHTML(ctx context.Context, providers config.Providers, text
 
 	modelOutput := response.Choices[len(response.Choices)-1].Message.Content
 	if strings.HasPrefix(modelOutput, "<error>Not a recipe</error>") {
-		return nil, apicommon.NewUserFacingError("the provided website is not a recipe")
+		return nil, apicommon.NewUserFacingError("no recipe detecting in website or cannot be imported")
 	}
 
 	decoder := xml.NewDecoder(strings.NewReader(modelOutput))
@@ -82,7 +97,20 @@ type FileAttachment struct {
 	Content  []byte
 }
 
-func ExtractRecipeFromPhotos(ctx context.Context, providers config.Providers, files []FileAttachment) (*models.Recipe, error) {
+// ExtractRecipeFromMedium takes the images and extracts a Recipe object.
+func ExtractRecipeFromPhotos(ctx context.Context, providers config.Providers, files []FileAttachment) (ret *models.Recipe, err error) {
+	attempts := 2
+	for range attempts {
+		ret, err = extractRecipeFromPhotosInner(ctx, providers, files)
+		if err == nil {
+			break
+		}
+	}
+
+	return
+}
+
+func extractRecipeFromPhotosInner(ctx context.Context, providers config.Providers, files []FileAttachment) (*models.Recipe, error) {
 	prompt := getRecipeExtractionPrompt(recipeMediumPhoto)
 
 	contentParts := make([]openai.ChatCompletionContentPartUnionParam, len(files))
@@ -126,7 +154,7 @@ func ExtractRecipeFromPhotos(ctx context.Context, providers config.Providers, fi
 
 	modelOutput := response.Choices[len(response.Choices)-1].Message.Content
 	if strings.HasPrefix(modelOutput, "<error>Not a recipe</error>") {
-		return nil, apicommon.NewUserFacingError("the provided photo is not a recipe")
+		return nil, apicommon.NewUserFacingError("no recipe detected in photos")
 	}
 
 	decoder := xml.NewDecoder(strings.NewReader(modelOutput))

@@ -8,11 +8,12 @@ import (
 )
 
 type Config struct {
-	OpenAIKey             string `yaml:"openAIKey" env:"OPENAI_KEY"`
-	TokenExpirySeconds    int    `yaml:"tokenExpirySeconds"`
-	RecipeImportEnabled   bool   `yaml:"recipeImportEnabled"`
-	SemanticSearchEnabled bool   `yaml:"semanticSearchEnabled"`
-	HTTPPort              int    `yaml:"httpPort"`
+	OpenAIKey              string `yaml:"openAIKey" env:"OPENAI_KEY"`
+	TokenExpirySeconds     int    `yaml:"tokenExpirySeconds"`
+	TokenLongExpirySeconds int    `yaml:"tokenLongExpirySeconds"`
+	RecipeImportEnabled    bool   `yaml:"recipeImportEnabled"`
+	SemanticSearchEnabled  bool   `yaml:"semanticSearchEnabled"`
+	HTTPPort               int    `yaml:"httpPort"`
 }
 
 func LoadConfig() (*Config, error) {

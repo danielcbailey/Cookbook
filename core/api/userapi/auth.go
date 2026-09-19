@@ -13,8 +13,9 @@ import (
 )
 
 type UserLoginRequest struct {
-	Email    string `json:"email"`
-	Password string `json:"password"`
+	Email     string `json:"email"`
+	Password  string `json:"password"`
+	LongLived bool   `json:"long_lived"`
 }
 
 type UserLoginResponse struct {
@@ -57,7 +58,7 @@ func handleUserLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	token, expiry, err := apicommon.CreateUserToken(r.Context(), p, user)
+	token, expiry, err := apicommon.CreateUserToken(r.Context(), p, user, parsedReq.LongLived)
 	if err != nil {
 		p.Log().Error("failed to create token for user login", slog.Any("error", err))
 		http.Error(w, "internal server error", http.StatusInternalServerError)

@@ -56,15 +56,21 @@ func getToken(r *http.Request) string {
 	return ""
 }
 
-func CreateUserToken(ctx context.Context, providers config.Providers, user *models.User) (string, time.Time, error) {
+func CreateUserToken(ctx context.Context, providers config.Providers, user *models.User, long bool) (string, time.Time, error) {
 	token, err := secureRandomString(32)
 	if err != nil {
 		return "", time.Time{}, err
 	}
 
 	expirySeconds := providers.Config().TokenExpirySeconds
-	if expirySeconds == 0 {
+	if long {
+		expirySeconds = providers.Config().TokenLongExpirySeconds
+	}
+
+	if expirySeconds == 0 && !long {
 		expirySeconds = 8 * 60 * 60 // 8 hours
+	} else if expirySeconds == 0 {
+		expirySeconds = 30 * 24 * 60 * 60 // 30 days
 	}
 
 	expiryDuration := time.Duration(expirySeconds) * time.Second

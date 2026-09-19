@@ -98,6 +98,101 @@ const (
 	RecipeTimeUnitWeeks   RecipeTimeUnit = "week"
 )
 
+type RecipeMealtime string
+
+const (
+	RecipeMealtimeBreakfast RecipeMealtime = "breakfast"
+	RecipeMealtimeLunch     RecipeMealtime = "lunch"
+	RecipeMealtimeDinner    RecipeMealtime = "dinner"
+	RecipeMealtimeDessert   RecipeMealtime = "dessert"
+	RecipeMealtimeSnack     RecipeMealtime = "snack"
+)
+
+type RecipeCategory string
+
+const (
+	RecipeCategoryBread                   RecipeCategory = "bread"
+	RecipeCategoryPastry                  RecipeCategory = "pastry"
+	RecipeCategoryMuffin                  RecipeCategory = "muffin"
+	RecipeCategoryScone                   RecipeCategory = "scone"
+	RecipeCategoryCake                    RecipeCategory = "cake"
+	RecipeCategoryPie                     RecipeCategory = "pie"
+	RecipeCategoryDessertBar              RecipeCategory = "dessert bar"
+	RecipeCategoryFrozenAndColdDessert    RecipeCategory = "frozen and cold dessert"
+	RecipeCategoryCookie                  RecipeCategory = "cookie"
+	RecipeCategoryBatterBread             RecipeCategory = "batter bread"
+	RecipeCategoryPastaAndNoodles         RecipeCategory = "pasta and noodles"
+	RecipeCategorySoupAndStew             RecipeCategory = "soup and stew"
+	RecipeCategorySalad                   RecipeCategory = "salad"
+	RecipeCategorySandwichAndWraps        RecipeCategory = "sandwich and wraps"
+	RecipeCategoryRice                    RecipeCategory = "rice"
+	RecipeCategoryGrilled                 RecipeCategory = "grilled"
+	RecipeCategoryRoastsAndBraises        RecipeCategory = "roasts and braises"
+	RecipeCategoryFriedFood               RecipeCategory = "fried food"
+	RecipeCategoryStirFryAndSaute         RecipeCategory = "stir-fry and saute"
+	RecipeCategoryCasseroleAndBakes       RecipeCategory = "casserole and bakes"
+	RecipeCategoryPizzaAndFlatbread       RecipeCategory = "pizza and flatbread"
+	RecipeCategorySeafood                 RecipeCategory = "seafood"
+	RecipeCategoryEggs                    RecipeCategory = "eggs"
+	RecipeCategorySavoryBreakfast         RecipeCategory = "savory breakfast"
+	RecipeCategoryCurry                   RecipeCategory = "curry"
+	RecipeCategoryDumplingsAndFilledPasta RecipeCategory = "dumplings and filled pasta"
+)
+
+type RecipeCuisine string
+
+const (
+	RecipeCuisineAmerican       RecipeCuisine = "american"
+	RecipeCuisineGerman         RecipeCuisine = "german"
+	RecipeCuisineFrench         RecipeCuisine = "french"
+	RecipeCuisineMexican        RecipeCuisine = "mexican"
+	RecipeCuisineLatinAmerican  RecipeCuisine = "latin american"
+	RecipeCuisineItalian        RecipeCuisine = "italian"
+	RecipeCuisineJapanese       RecipeCuisine = "japanese"
+	RecipeCuisineChinese        RecipeCuisine = "chinese"
+	RecipeCuisineKorean         RecipeCuisine = "korean"
+	RecipeCuisineMiddleEastern  RecipeCuisine = "middle eastern"
+	RecipeCuisineIndian         RecipeCuisine = "indian"
+	RecipeCuisineThai           RecipeCuisine = "thai"
+	RecipeCuisineMediterranean  RecipeCuisine = "mediterranean"
+	RecipeCuisineSpanish        RecipeCuisine = "spanish"
+	RecipeCuisineCaribbean      RecipeCuisine = "caribbean"
+	RecipeCuisineVietnamese     RecipeCuisine = "vietnamese"
+	RecipeCuisineAfrican        RecipeCuisine = "african"
+	RecipeCuisineBritish        RecipeCuisine = "british"
+	RecipeCuisineSoutheastAsian RecipeCuisine = "southeast asian"
+	RecipeCuisineFusion         RecipeCuisine = "fusion"
+	RecipeCuisineOther          RecipeCuisine = "other"
+)
+
+type RecipeProtein string
+
+const (
+	RecipeProteinChicken    RecipeProtein = "chicken"
+	RecipeProteinPork       RecipeProtein = "pork"
+	RecipeProteinBeef       RecipeProtein = "beef"
+	RecipeProteinVeal       RecipeProtein = "veal"
+	RecipeProteinLamb       RecipeProtein = "lamb"
+	RecipeProteinDuck       RecipeProtein = "duck"
+	RecipeProteinTurkey     RecipeProtein = "turkey"
+	RecipeProteinSausage    RecipeProtein = "sausage"
+	RecipeProteinRedMeat    RecipeProtein = "red meat"
+	RecipeProteinPoultry    RecipeProtein = "poultry"
+	RecipeProteinGameMeat   RecipeProtein = "game meat"
+	RecipeProteinOffal      RecipeProtein = "offal"
+	RecipeProteinShrimp     RecipeProtein = "shrimp"
+	RecipeProteinSalmon     RecipeProtein = "salmon"
+	RecipeProteinTuna       RecipeProtein = "tuna"
+	RecipeProteinCod        RecipeProtein = "cod"
+	RecipeProteinCrab       RecipeProtein = "crab"
+	RecipeProteinHalibut    RecipeProtein = "halibut"
+	RecipeProteinLobster    RecipeProtein = "lobster"
+	RecipeProteinWhitefish  RecipeProtein = "whitefish"
+	RecipeProteinOilyFish   RecipeProtein = "oily fish"
+	RecipeProteinCrustacean RecipeProtein = "crustacean"
+	RecipeProteinMollusk    RecipeProtein = "mollusk"
+)
+
 func RecipeIngredientString(ri RecipeIngredient) string {
 	return fmt.Sprintf("{i:%g,%s,%s}", ri.Quantity, ri.Unit, ri.Ingredient.Name)
 }

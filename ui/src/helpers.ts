@@ -40,6 +40,10 @@ const redirectParam = 'redirect';
 
 let redirecting = false;
 
+export function isLoginPage(): boolean {
+    return window.location.pathname === loginPath;
+}
+
 /**
  * Sends the user to the login page, capturing the current path and query
  * parameters so they can be returned to it afterwards. Called when the API
@@ -49,7 +53,7 @@ let redirecting = false;
 export function redirectToLogin() {
     // Several requests can fail at once when a session expires, and the user may
     // already be sitting on the login page.
-    if (redirecting || window.location.pathname === loginPath) {
+    if (redirecting || isLoginPage()) {
         return;
     }
     redirecting = true;

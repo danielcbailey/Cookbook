@@ -1,5 +1,6 @@
 import type { Recipe, RecipeListItem } from './apiTypes';
 import { redirectToLogin } from './helpers';
+import { invalidateToken } from './shared/authHelpers';
 
 const basePath = '/api/v1/recipe';
 
@@ -33,6 +34,7 @@ async function send(path: string, init: RequestInit, options?: RequestOptions): 
         // The session is gone or expired: there is nothing the caller can do to
         // recover, so send the user to log in again.
         if (response.status === 401) {
+            invalidateToken();
             redirectToLogin();
         }
 

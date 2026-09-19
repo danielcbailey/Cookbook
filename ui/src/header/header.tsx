@@ -1,27 +1,27 @@
 import { useContext, useState, type CSSProperties } from 'react'
 import { useNavigate } from 'react-router-dom';
 import { Avatar, Button, IconSearch, Typography } from '@heroui/react'
-import iconUrl from '../assets/icon.png'
 import { UserContext } from '../contexts';
+import { LogoWordmark } from '../shared/brand';
 
-const headerStyle: CSSProperties = {
-    width: '100%',
-    display: 'flex',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 10,
-    borderBottom: '2px solid var(--border)'
-}
-
-export function Header() {
+export function Header({loginVariant}: {loginVariant?: boolean}) {
     const user = useContext(UserContext);
+
+    const headerStyle: CSSProperties = {
+        width: '100%',
+        display: 'flex',
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: loginVariant ? 'flex-start' : 'center',
+        padding: 10,
+        borderBottom: loginVariant ? undefined : '2px solid var(--border)',
+    }
 
     return (
         <div style={headerStyle}>
             <LogoWordmark/>
-            <NavButtons/>
-            <NavRight user={user && (user.first_name + ' ' + user.last_name)}/>
+            {!loginVariant && <NavButtons/>}
+            {!loginVariant && <NavRight user={user && (user.first_name + ' ' + user.last_name)}/>}
         </div>
     );
 }
@@ -31,15 +31,6 @@ const headerFlexStyle: CSSProperties = {
     flexDirection: 'row',
     gap: 10,
     alignItems: 'center',
-}
-
-function LogoWordmark() {
-    return (
-        <div style={headerFlexStyle}>
-            <img src={iconUrl} style={{width: 53, height: 53}}/>
-            <Typography.Heading level={1} weight="bold">Cookbook</Typography.Heading>
-        </div>
-    );
 }
 
 function NavButtons() {
