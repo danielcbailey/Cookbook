@@ -113,7 +113,7 @@ func ExtractRecipeFromPhotos(ctx context.Context, providers config.Providers, fi
 func extractRecipeFromPhotosInner(ctx context.Context, providers config.Providers, files []FileAttachment) (*models.Recipe, error) {
 	prompt := getRecipeExtractionPrompt(recipeMediumPhoto)
 
-	contentParts := make([]openai.ChatCompletionContentPartUnionParam, len(files))
+	contentParts := make([]openai.ChatCompletionContentPartUnionParam, 0, len(files))
 	for _, file := range files {
 		imageURL := &openai.ChatCompletionContentPartImageParam{
 			ImageURL: openai.ChatCompletionContentPartImageImageURLParam{

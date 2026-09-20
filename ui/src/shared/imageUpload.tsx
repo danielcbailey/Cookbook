@@ -1,4 +1,4 @@
-import { Picture } from "@gravity-ui/icons";
+import { ArrowUpFromLine, Picture } from "@gravity-ui/icons";
 import { useRef, useState, type CSSProperties } from "react";
 
 // JPEG quality of the encoded image. 0.85 is the usual point where further
@@ -73,7 +73,7 @@ export function ImageUpload({children, width, height, onImage, maxArea}: {childr
     );
 }
 
-export function ImageUploadMultiple({width, height, onImages, maxAreaEach}: {width: number, height: number, onImages?: (dataURIs: string[]) => void, maxAreaEach?: number}) {
+export function ImageUploadMultiple({width, height, onImages, onFiles, maxAreaEach}: {width: number, height: number, onImages?: (dataURIs: string[]) => void, onFiles?: (files: File[]) => void, maxAreaEach?: number}) {
     const inputRef = useRef<HTMLInputElement>(null);
 
     const containerStyle: CSSProperties = {
@@ -104,6 +104,11 @@ export function ImageUploadMultiple({width, height, onImages, maxAreaEach}: {wid
         event.currentTarget.value = '';
         if (files.length === 0) return;
 
+        if (onFiles) {
+            onFiles(files);
+            return;
+        }
+
         try {
             // Resized one at a time, in the order they were picked. Decoding
             // them all at once would hold every full-resolution bitmap in
@@ -125,8 +130,7 @@ export function ImageUploadMultiple({width, height, onImages, maxAreaEach}: {wid
             onClick={pickFiles}>
             {/* Nothing is rendered underneath, so the prompt always shows. */}
             <div style={containerStyle}>
-                <Picture style={{width: 30, height: 30}}/>
-                Upload Images
+                <ArrowUpFromLine/>
             </div>
             {/* The picker is opened by clicking the container, so the input
                 itself stays hidden. Its own click must not bubble back up to
