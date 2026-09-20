@@ -381,9 +381,16 @@ func saveImage(ctx context.Context, providers config.Providers, imageURL, imgCtx
 }
 
 func decodeEmbeddedImage(urlStr string) (data []byte, isEmbedded bool, err error) {
-	urlStr, err = url.QueryUnescape(urlStr)
-	if err != nil || !strings.HasPrefix(urlStr, "data:image/") {
-		return nil, false, nil
+	if !strings.HasPrefix(urlStr, "data:image/") {
+		// The URL may have been percent-encoded in transit. PathUnescape is used
+		// rather than QueryUnescape because the latter also turns '+' into a
+		// space, which corrupts the base64 payload of an already-decoded data URL.
+		unescaped, unescapeErr := url.PathUnescape(urlStr)
+		if unescapeErr != nil || !strings.HasPrefix(unescaped, "data:image/") {
+			return nil, false, nil
+		}
+
+		urlStr = unescaped
 	}
 
 	semiIndex := strings.Index(urlStr, ";")
